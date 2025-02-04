@@ -43,7 +43,7 @@ resource "aws_subnet" "public_subnet" {
 resource "aws_internet_gateway" "internet_gateway" {
   vpc_id = aws_vpc.custom_vpc.id
   tags = {
-    Name = "Custom Internet Gateway",
+    Name = "Internet Gateway",
   }
 }
 
