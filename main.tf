@@ -35,7 +35,7 @@ resource "aws_subnet" "public_subnet" {
   cidr_block        = cidrsubnet(aws_vpc.custom_vpc.cidr_block, 8, count.index + 1)
   availability_zone = element(var.vpc_availability_zone, count.index)
   tags = {
-    Name = "Custom Public Subnet${count.index + 1}",
+    Name = "Public Subnet${count.index + 1}",
   }
 }
 //3. Create internet gateway and attach it to the vpc
