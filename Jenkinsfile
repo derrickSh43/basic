@@ -25,7 +25,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/derrickSh43/autoScale'
+                git branch: 'main', url: 'https://github.com/derrickSh43/basic'
             }
         }
 
@@ -36,7 +36,7 @@ pipeline {
                     withCredentials([string(credentialsId: 'SONARQUBE_TOKEN', variable: 'SONAR_TOKEN')]) {
                         def scanStatus = sh(script: '''
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
-                            -Dsonar.projectKey=derrickSh43_autoScale \
+                            -Dsonar.projectKey=derrickSh43_basic \
                             -Dsonar.organization=derricksh43 \
                             -Dsonar.host.url=${SONARQUBE_URL} \
                             -Dsonar.login=''' + SONAR_TOKEN, returnStatus: true)
