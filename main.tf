@@ -17,7 +17,7 @@ resource "aws_vpc" "custom_vpc" {
   enable_dns_support   = true
   enable_dns_hostnames = true
   tags = {
-    Name = "Jung DrippyWu VPC"
+    Name = "Derrick VPC"
   }
 }
 
