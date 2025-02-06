@@ -175,15 +175,25 @@ pipeline {
 // Jira function using withCredentials inside
 def createJiraTicket(String issueTitle, String issueDescription) {
     script {
-        withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
+        withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN'),
+                         string(credentialsId: 'JIRA_EMAIL', variable: 'JIRA_USER')]) {
 
-            jiraNewIssue site: "https://derrickweil.atlassian.net",
-                         projectKey: "SCRUM",
-                         issueType: "Bug",
-                         summary: issueTitle,
-                         description: issueDescription,
-                         priority: "High",
-                         basicAuth: JIRA_TOKEN
+            def response = sh(script: """
+                curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
+                --user "$JIRA_USER:$JIRA_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data '{
+                    "fields": {
+                        "project": { "key": "SCRUM" },
+                        "summary": "${issueTitle}",
+                        "description": "${issueDescription}",
+                        "issuetype": { "name": "Bug" }
+                    }
+                }'
+            """, returnStdout: true).trim()
+
+            echo "Jira Response: ${response}"
         }
     }
 }
+
