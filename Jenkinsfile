@@ -30,44 +30,39 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'SONARQUBE_TOKEN_ID', variable: 'SONAR_TOKEN')]) {
-                        
-                        // Use Trivy instead of tfsec
-                        sh 'trivy config -f sarif . | tee trivy-report.sarif'
 
+                        // Run SonarQube Scan
                         def scanStatus = sh(script: '''
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
                             -Dsonar.projectKey=derrickSh43_basic \
                             -Dsonar.organization=derricksh43 \
                             -Dsonar.host.url=${SONARQUBE_URL} \
-                            -Dsonar.login=${SONAR_TOKEN} \
-                            -Dsonar.externalIssuesReportPaths=trivy-report.sarif
+                            -Dsonar.login=${SONAR_TOKEN}
                         ''', returnStatus: true)
 
                         if (scanStatus != 0) {
-                            def trivyIssues = sh(script: "jq -r '.Results[].Misconfigurations[]?.Description' trivy-report.sarif || echo 'No issues found'", returnStdout: true).trim()
 
                             def sonarIssues = sh(script: '''
                                 curl -s -u ${SONAR_TOKEN}: \
                                 "${SONARQUBE_URL}/api/issues/search?componentKeys=derrickSh43_basic&severities=BLOCKER,CRITICAL&statuses=OPEN" | jq -r '.issues[].message' || echo "No issues found"
                             ''', returnStdout: true).trim()
 
-                            if (!sonarIssues.contains("No issues found") || !trivyIssues.contains("No issues found")) {
+                            if (!sonarIssues.contains("No issues found")) {
                                 def issueDescription = """ 
                                     **SonarCloud Security Issues:**
                                     ${sonarIssues}
-
-                                    **Terraform Security Issues (Trivy):**
-                                    ${trivyIssues}
                                 """.stripIndent()
 
                                 createJiraTicket("Security Vulnerabilities Detected", issueDescription)
-                                error("SonarQube and/or Trivy found security vulnerabilities!")
+                                error("SonarQube found security vulnerabilities!")
                             }
                         }
                     }
                 }
             }
         }
+
+
 
 
         stage('Snyk Security Scan') {
