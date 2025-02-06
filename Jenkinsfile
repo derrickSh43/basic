@@ -32,7 +32,7 @@ pipeline {
                     withCredentials([string(credentialsId: 'SONARQUBE_TOKEN_ID', variable: 'SONAR_TOKEN')]) {
                         
                         // Use Trivy instead of tfsec
-                        sh 'trivy iac -f sarif -o trivy-report.sarif .'
+                        sh 'trivy iac -f sarif . | tee trivy-report.sarif'
 
                         def scanStatus = sh(script: '''
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
