@@ -182,7 +182,21 @@ def createJiraTicket(String issueTitle, String issueDescription) {
                 "fields": {
                     "project": { "key": "JENKINS" },
                     "summary": "${issueTitle}",
-                    "description": "${issueDescription}",
+                    "description": {
+                        "type": "doc",
+                        "version": 1,
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "${issueDescription}"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
                     "issuetype": { "name": "Bug" }
                 }
             }
