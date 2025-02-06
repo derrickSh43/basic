@@ -74,7 +74,7 @@ pipeline {
                         sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
 
                         // Run Snyk scan
-                        def snykIssues = sh(script: "snyk config test --json || echo '{\"infrastructureAsCodeIssues\": []}'", returnStdout: true).trim()
+                        def snykIssues = sh(script: "snyk iac test --json || echo '{\"infrastructureAsCodeIssues\": []}'", returnStdout: true).trim()
 
                         // Monitor Snyk for vulnerabilities
                         sh "snyk monitor || echo 'No supported files found, monitoring skipped.'"
