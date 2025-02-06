@@ -30,7 +30,9 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'SONARQUBE_TOKEN_ID', variable: 'SONAR_TOKEN')]) {
-                        sh 'tfsec . --format sarif --out tfsec-report.sarif'
+                        
+                        // Use Trivy instead of tfsec
+                        sh 'trivy iac --format sarif --output trivy-report.sarif .'
 
                         def scanStatus = sh(script: '''
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
@@ -38,45 +40,51 @@ pipeline {
                             -Dsonar.organization=derricksh43 \
                             -Dsonar.host.url=${SONARQUBE_URL} \
                             -Dsonar.login=${SONAR_TOKEN} \
-                            -Dsonar.externalIssuesReportPaths=tfsec-report.sarif
+                            -Dsonar.externalIssuesReportPaths=trivy-report.sarif
                         ''', returnStatus: true)
 
                         if (scanStatus != 0) {
-                            def tfsecIssues = sh(script: "jq -r '.runs[0].results[].message' tfsec-report.sarif || echo 'No issues found'", returnStdout: true).trim()
+                            def trivyIssues = sh(script: "jq -r '.Results[].Misconfigurations[]?.Description' trivy-report.sarif || echo 'No issues found'", returnStdout: true).trim()
 
                             def sonarIssues = sh(script: '''
                                 curl -s -u ${SONAR_TOKEN}: \
                                 "${SONARQUBE_URL}/api/issues/search?componentKeys=derrickSh43_basic&severities=BLOCKER,CRITICAL&statuses=OPEN" | jq -r '.issues[].message' || echo "No issues found"
                             ''', returnStdout: true).trim()
 
-                            def issueDescription = """ 
-                                **SonarCloud Security Issues:**
-                                ${sonarIssues}
+                            if (!sonarIssues.contains("No issues found") || !trivyIssues.contains("No issues found")) {
+                                def issueDescription = """ 
+                                    **SonarCloud Security Issues:**
+                                    ${sonarIssues}
 
-                                **Terraform Security Issues (TFSec):**
-                                ${tfsecIssues}
-                            """.stripIndent()
+                                    **Terraform Security Issues (Trivy):**
+                                    ${trivyIssues}
+                                """.stripIndent()
 
-                            createJiraTicket("Security Vulnerabilities Detected", issueDescription)
-                            error("SonarQube found security vulnerabilities in Terraform files!")
+                                createJiraTicket("Security Vulnerabilities Detected", issueDescription)
+                                error("SonarQube and/or Trivy found security vulnerabilities!")
+                            }
                         }
                     }
                 }
             }
         }
 
+
         stage('Snyk Security Scan') {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
-                        sh "snyk auth ${SNYK_TOKEN}"
+                        sh 'echo $SNYK_TOKEN | snyk auth'
                         
-                        def snykIssues = sh(script: "snyk iac test --json || echo '{}'", returnStdout: true).trim()
+                        def snykIssues = sh(script: "snyk iac test --json || echo '{\"infrastructureAsCodeIssues\": []}'", returnStdout: true).trim()
+
                         sh "snyk monitor || echo 'No supported files found, monitoring skipped.'"
 
-                        def snykFindings = sh(script: "echo '${snykIssues}' | jq -r '.infrastructureAsCodeIssues[]?.message' || echo 'No issues found'", returnStdout: true).trim()
+                        def snykFindings = sh(script: "echo '${snykIssues}' | jq -r '.infrastructureAsCodeIssues | if length > 0 then .[].message else \"No issues found\" end'", returnStdout: true).trim()
 
-                        if (snykFindings != "No issues found") {
+
+                        if (!snykFindings.contains("No issues found")) {
+
                             def issueDescription = """ 
                                 **Snyk Security Scan Found Issues:**
                                 ${snykFindings}
