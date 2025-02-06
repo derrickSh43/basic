@@ -172,28 +172,36 @@ pipeline {
     }
 }
 
-// Jira function using withCredentials inside
 def createJiraTicket(String issueTitle, String issueDescription) {
     script {
         withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN'),
                          string(credentialsId: 'JIRA_EMAIL', variable: 'JIRA_USER')]) {
 
+            def jiraPayload = """
+            {
+                "fields": {
+                    "project": { "key": "JENKINS" },
+                    "summary": "${issueTitle}",
+                    "description": "${issueDescription}",
+                    "issuetype": { "name": "Bug" }
+                }
+            }
+            """
+
             def response = sh(script: """
                 curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
-                --data '{
-                    "fields": {
-                        "project": { "key": "SCRUM" },
-                        "summary": "${issueTitle}",
-                        "description": "${issueDescription}",
-                        "issuetype": { "name": "Bug" }
-                    }
-                }'
+                --data '${jiraPayload}'
             """, returnStdout: true).trim()
 
             echo "Jira Response: ${response}"
+
+            if (!response.contains('"key"')) {
+                error("Jira ticket creation failed! Response: ${response}")
+            }
         }
     }
 }
+
 
