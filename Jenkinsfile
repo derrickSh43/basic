@@ -25,6 +25,15 @@ pipeline {
                 git branch: 'main', url: 'https://github.com/derrickSh43/basic'
             }
         }
+        stage('Test Jira Ticket Creation') {
+            steps {
+                script {
+                    echo "Testing Jira ticket creation from Jenkins pipeline..."
+                    createJiraTicket("Jenkins Pipeline Test", "This is a test issue created from Jenkins to validate Jira integration.")
+                }
+            }
+        }
+
 
         stage('Static Code Analysis (SAST)') {
             steps {
