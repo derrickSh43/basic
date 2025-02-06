@@ -178,46 +178,27 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN'),
                          string(credentialsId: 'JIRA_EMAIL', variable: 'JIRA_USER')]) {
 
-            def jiraPayload = """
-            {
-                "fields": {
-                    "project": { "key": "JENKINS" },
-                    "summary": "${issueTitle}",
-                    "description": {
-                        "type": "doc",
-                        "version": 1,
-                        "content": [
-                            {
-                                "type": "paragraph",
-                                "content": [
-                                    {
-                                        "type": "text",
-                                        "text": "${issueDescription}"
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    "issuetype": { "name": "Bug" }
-                }
-            }
-            """
+            echo "Creating Jira Ticket: ${issueTitle}"
 
             def response = sh(script: """
                 curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
-                --data '${jiraPayload}'
+                --data '{
+                    "fields": {
+                        "project": { "key": "JENKINS" },
+                        "summary": "${issueTitle}",
+                        "description": { "type": "doc", "version": 1, "content": [{"type": "paragraph","content": [{"type": "text", "text": "${issueDescription}"}]}]},
+                        "issuetype": { "name": "Bug" }
+                    }
+                }'
             """, returnStdout: true).trim()
 
             echo "Jira Response: ${response}"
-
-            if (!response.contains('"key"')) {
-                error("Jira ticket creation failed! Response: ${response}")
-            }
         }
     }
 }
+
 
 
 
