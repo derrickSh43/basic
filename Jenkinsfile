@@ -81,25 +81,26 @@ pipeline {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
                         sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
 
-                        // Run Snyk scan and return status
+                        // Run Snyk scan and capture exit status
                         def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low", returnStatus: true)
                         echo "Snyk Scan Status: ${snykScanStatus}"
 
-                        // If Snyk detects vulnerabilities (non-zero exit code), process them
+                        // If Snyk detects vulnerabilities, extract issues
                         if (snykScanStatus != 0) {
                             echo "Snyk found security vulnerabilities! Extracting issues..."
 
-                            // Step 2: Extract vulnerability messages from Snyk JSON
                             def snykFindings = sh(script: """
-                                snyk iac test --json --severity-threshold=low | jq -r '.infrastructureAsCodeIssues | if length > 0 then .[].message else "No issues found" end'
+                                snyk iac test --json --severity-threshold=low | jq -r '[.infrastructureAsCodeIssues[]?.message] | join("\\n")' || echo 'No issues found'
                             """, returnStdout: true).trim()
 
                             echo "Snyk Findings: ${snykFindings}"
 
                             // If issues were found, create a Jira ticket
-                            if (!snykFindings.contains("No issues found")) {
+                            if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
                                 echo "Creating Jira Ticket for Snyk vulnerabilities..."
                                 createJiraTicket("Snyk Security Vulnerabilities Detected", snykFindings)
+                            } else {
+                                echo "No actionable security vulnerabilities detected by Snyk."
                             }
 
                             // Stop the pipeline due to vulnerabilities
@@ -109,6 +110,7 @@ pipeline {
                 }
             }
         }
+
 
 
 
@@ -192,26 +194,54 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN'),
                          string(credentialsId: 'JIRA_EMAIL', variable: 'JIRA_USER')]) {
 
-            echo "Creating Jira Ticket: ${issueTitle}"
+            if (!issueDescription?.trim()) {
+                echo "Skipping Jira ticket creation: Issue description is empty."
+                return
+            }
+
+            def formattedDescription = issueDescription.replaceAll('"', '\\"')
+
+            def jiraPayload = """
+            {
+                "fields": {
+                    "project": { "key": "JENKINS" },
+                    "summary": "${issueTitle}",
+                    "description": {
+                        "type": "doc",
+                        "version": 1,
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "${formattedDescription}"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "issuetype": { "name": "Bug" }
+                }
+            }
+            """
 
             def response = sh(script: """
                 curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
-                --data '{
-                    "fields": {
-                        "project": { "key": "JENKINS" },
-                        "summary": "${issueTitle}",
-                        "description": { "type": "doc", "version": 1, "content": [{"type": "paragraph","content": [{"type": "text", "text": "${issueDescription}"}]}]},
-                        "issuetype": { "name": "Bug" }
-                    }
-                }'
+                --data '${jiraPayload}'
             """, returnStdout: true).trim()
 
             echo "Jira Response: ${response}"
+
+            if (!response.contains('"key"')) {
+                error("Jira ticket creation failed! Response: ${response}")
+            }
         }
     }
 }
+
 
 
 
