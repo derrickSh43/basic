@@ -176,12 +176,14 @@ pipeline {
 def createJiraTicket(String issueTitle, String issueDescription) {
     script {
         withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
-            jiraNewIssue site: JIRA_SITE,
-                         projectKey: JIRA_PROJECT,
+
+            jiraNewIssue site: "https://derrickweil.atlassian.net",
+                         projectKey: "SCRUM",
                          issueType: "Bug",
                          summary: issueTitle,
                          description: issueDescription,
-                         priority: "High"
+                         priority: "High",
+                         basicAuth: JIRA_TOKEN
         }
     }
 }
