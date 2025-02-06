@@ -53,8 +53,9 @@ pipeline {
                                     ${sonarIssues}
                                 """.stripIndent()
 
-                                createJiraTicket("Security Vulnerabilities Detected", issueDescription)
-                                error("SonarQube found security vulnerabilities!")
+                                echo "Creating Jira Ticket for SonarCloud issues..."
+                                createJiraTicket("SonarQube Security Vulnerabilities Detected", issueDescription)
+                                error("SonarQube found security vulnerabilities! Pipeline stopping.")
                             }
                         }
                     }
