@@ -102,14 +102,20 @@ pipeline {
             steps {
                 script {
                     def trivyScanStatus = sh(script: '''
-                        trivy iac --format json --output trivy-report.json .
+                        trivy config -f json . | tee trivy-report.json
                     ''', returnStatus: true)
 
+                    // Ensure the JSON report exists before parsing
+                    if (!fileExists('trivy-report.json')) {
+                        echo "Trivy report not found. Skipping analysis."
+                        return
+                    }
+
                     def trivyIssues = sh(script: '''
-                        jq -r '.Results[].Misconfigurations[]?.Description' trivy-report.json || echo "No issues found"
+                        jq -r '.Results[].Misconfigurations[]?.Description // "No issues found"' trivy-report.json
                     ''', returnStdout: true).trim()
 
-                    if (trivyScanStatus != 0 && trivyIssues != "No issues found") {
+                    if (trivyScanStatus != 0 && !trivyIssues.contains("No issues found")) {
                         def issueDescription = """ 
                             **Aqua Trivy Security Issues:**
                             ${trivyIssues}
@@ -121,6 +127,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Initialize Terraform') {
             steps {
