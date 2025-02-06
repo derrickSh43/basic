@@ -81,27 +81,35 @@ pipeline {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
                         sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
 
+                        // Run Snyk scan and return status
                         def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low", returnStatus: true)
                         echo "Snyk Scan Status: ${snykScanStatus}"
 
+                        // If Snyk detects vulnerabilities (non-zero exit code), process them
                         if (snykScanStatus != 0) {
-                            echo "Snyk found security vulnerabilities! Creating Jira ticket..."
-                            
-                            // Extract issues from Snyk JSON output
+                            echo "Snyk found security vulnerabilities! Extracting issues..."
+
+                            // Step 2: Extract vulnerability messages from Snyk JSON
                             def snykFindings = sh(script: """
-                                snyk iac test --json | jq -r '.infrastructureAsCodeIssues[]?.message' || echo 'No issues found'
+                                snyk iac test --json --severity-threshold=low | jq -r '.infrastructureAsCodeIssues | if length > 0 then .[].message else "No issues found" end'
                             """, returnStdout: true).trim()
 
+                            echo "Snyk Findings: ${snykFindings}"
+
+                            // If issues were found, create a Jira ticket
                             if (!snykFindings.contains("No issues found")) {
+                                echo "Creating Jira Ticket for Snyk vulnerabilities..."
                                 createJiraTicket("Snyk Security Vulnerabilities Detected", snykFindings)
                             }
 
+                            // Stop the pipeline due to vulnerabilities
                             error("Snyk found security vulnerabilities! Stopping pipeline.")
                         }
                     }
                 }
             }
         }
+
 
 
 
