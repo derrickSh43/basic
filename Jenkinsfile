@@ -69,22 +69,26 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
-                        sh 'echo $SNYK_TOKEN | snyk auth'
-                        
+
+                        // Use API Token for authentication (No interactive login)
+                        sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
+
+                        // Run Snyk scan
                         def snykIssues = sh(script: "snyk iac test --json || echo '{\"infrastructureAsCodeIssues\": []}'", returnStdout: true).trim()
 
+                        // Monitor Snyk for vulnerabilities
                         sh "snyk monitor || echo 'No supported files found, monitoring skipped.'"
 
+                        // Parse JSON output safely
                         def snykFindings = sh(script: "echo '${snykIssues}' | jq -r '.infrastructureAsCodeIssues | if length > 0 then .[].message else \"No issues found\" end'", returnStdout: true).trim()
 
-
+                        // Check if vulnerabilities were found
                         if (!snykFindings.contains("No issues found")) {
-
                             def issueDescription = """ 
                                 **Snyk Security Scan Found Issues:**
                                 ${snykFindings}
                             """.stripIndent()
-                            
+
                             createJiraTicket("Snyk Security Vulnerabilities Detected", issueDescription)
                             error("Snyk found security vulnerabilities in Terraform files!")
                         }
@@ -92,6 +96,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Aqua Trivy Security Scan') {
             steps {
