@@ -203,12 +203,12 @@ def createJiraTicket(String issueTitle, String issueDescription) {
                 return
             }
 
-            // Properly escape special characters in the description
+            // Escape JSON special characters
             def formattedDescription = issueDescription
                 .replaceAll('"', '\\"')  // Escape double quotes
                 .replaceAll("\n", "\\n") // Escape new lines
 
-            // Correct JSON structure for Jira API
+            // Jira Cloud expects Atlassian Document Format for "description"
             def jiraPayload = """
             {
                 "fields": {
@@ -236,23 +236,23 @@ def createJiraTicket(String issueTitle, String issueDescription) {
 
             echo "DEBUG: Sending Jira Payload: ${jiraPayload}"
 
-            // Use echo instead of single quotes for proper JSON handling
             def response = sh(script: """
                 curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
-                --data @- <<EOF
-                ${jiraPayload}
-                EOF
+                --data '${jiraPayload}'
             """, returnStdout: true).trim()
 
             echo "Jira Response: ${response}"
 
             if (!response.contains('"key"')) {
                 error("Jira ticket creation failed! Response: ${response}")
+            } else {
+                echo "Jira Ticket Created Successfully!"
             }
         }
     }
 }
+
 
 
