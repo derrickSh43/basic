@@ -5,7 +5,7 @@ pipeline {
         AWS_REGION = 'us-east-1'
         SONARQUBE_URL = "https://sonarcloud.io"
         JIRA_SITE = "https://derrickweil.atlassian.net"
-        JIRA_PROJECT = "SCRUM"
+        JIRA_PROJECT = "JENKINS"
     }
 
     stages {
@@ -203,41 +203,32 @@ def createJiraTicket(String issueTitle, String issueDescription) {
                 return
             }
 
-            def formattedDescription = issueDescription.replaceAll('"', '\\"')
+            // Escape special characters in issue description
+            def formattedDescription = issueDescription
+                .replaceAll('"', '\\"') // Escape double quotes
+                .replaceAll("\n", "\\\\n") // Escape new lines
 
             def jiraPayload = """
             {
                 "fields": {
-                    "project": { "key": "JENKINS" },
+                    "project": { "key": "${JIRA_PROJECT}" },
                     "summary": "${issueTitle}",
-                    "description": {
-                        "type": "doc",
-                        "version": 1,
-                        "content": [
-                            {
-                                "type": "paragraph",
-                                "content": [
-                                    {
-                                        "type": "text",
-                                        "text": "${formattedDescription}"
-                                    }
-                                ]
-                            }
-                        ]
-                    },
+                    "description": "${formattedDescription}",
                     "issuetype": { "name": "Bug" }
                 }
             }
             """
 
+            echo "DEBUG: Sending Jira Payload: ${jiraPayload}"
+
             def response = sh(script: """
-                curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
+                curl -X POST "${JIRA_SITE}/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
                 --data '${jiraPayload}'
             """, returnStdout: true).trim()
 
-            echo "Jira Response: ${response}"
+            echo "DEBUG: Jira Response: ${response}"
 
             if (!response.contains('"key"')) {
                 error("Jira ticket creation failed! Response: ${response}")
@@ -245,4 +236,5 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         }
     }
 }
+
 
