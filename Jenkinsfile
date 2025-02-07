@@ -207,8 +207,8 @@ def createJiraTicket(String issueTitle, String issueDescription) {
             def formattedDescription = issueDescription
                 .replaceAll('"', '\\"')  // Escape double quotes
                 .replaceAll("\n", "\\n") // Escape new lines
+                .replaceAll("\r", "")    // Remove carriage returns
 
-            // Jira Cloud expects Atlassian Document Format for "description"
             def jiraPayload = """
             {
                 "fields": {
@@ -235,12 +235,13 @@ def createJiraTicket(String issueTitle, String issueDescription) {
             """
 
             echo "DEBUG: Sending Jira Payload: ${jiraPayload}"
+            sh(script: "echo '${jiraPayload}' | jq '.'", returnStdout: true) // Validate JSON before sending
 
             def response = sh(script: """
                 curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
-                --data '${jiraPayload}'
+                --data-raw '${jiraPayload}'
             """, returnStdout: true).trim()
 
             echo "Jira Response: ${response}"
@@ -253,6 +254,7 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         }
     }
 }
+
 
 
 
