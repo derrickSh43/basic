@@ -208,18 +208,11 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN'),
                          string(credentialsId: 'JIRA_EMAIL', variable: 'JIRA_USER')]) {
 
-            if (!issueDescription?.trim()) {
-                echo "Skipping Jira ticket creation: Issue description is empty."
-                return
-            }
-
-            // Ensure JSON-safe formatting
             def formattedDescription = issueDescription
-                .replaceAll('"', '\\"')  // Escape double quotes
-                .replaceAll("\n", "\\n") // Properly format new lines
-                .replaceAll("\r", "")    // Remove carriage returns
+                .replaceAll('"', '\\"')  
+                .replaceAll("\n", "\\n") 
+                .replaceAll("\r", "")    
 
-            // Ensure description only contains issue summaries
             def jiraPayload = """
             {
                 "fields": {
@@ -245,23 +238,21 @@ def createJiraTicket(String issueTitle, String issueDescription) {
             }
             """
 
-            echo "DEBUG: Sending Jira Payload: ${jiraPayload}"
-            sh(script: "echo '${jiraPayload}' | jq '.'", returnStdout: true) // Validate JSON before sending
+            writeFile file: 'jira_payload.json', text: jiraPayload // Save JSON to a file to avoid direct interpolation
 
-            def response = sh(script: """
+            def response = sh(script: '''
                 curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
-                --data-raw '${jiraPayload}'
-            """, returnStdout: true).trim()
+                --data @jira_payload.json
+            ''', returnStdout: true).trim()
 
             echo "Jira Response: ${response}"
 
             if (!response.contains('"key"')) {
                 error("Jira ticket creation failed! Response: ${response}")
-            } else {
-                echo "Jira Ticket Created Successfully!"
             }
         }
     }
 }
+
