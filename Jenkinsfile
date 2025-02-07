@@ -155,16 +155,19 @@ stage('Snyk Security Scan') {
                 }
             }
         }
-        stage('Fail Pipeline if Any Scan Fails') {
-            steps {
-                script {
-                    if (env.SCAN_FAILED == "true") {
-                        createJiraTicket("Security Scan Failed - Critical Issues", "One or more security scans failed. Check SonarQube, Snyk, or Trivy results.")
-                        error("Security scans detected critical vulnerabilities! Failing the pipeline.")
+            stage('Fail Pipeline if Any Scan Fails') {
+                steps {
+                    script {
+                        if (env.SCAN_FAILED == "true") {
+                            echo "Security scans detected vulnerabilities! Stopping the pipeline."
+                            error("Security vulnerabilities detected! See Jira tickets for details.")
+                        } else {
+                            echo "All security scans passed successfully."
+                        }
                     }
                 }
             }
-        }
+
 
 
         stage('Initialize Terraform') {
