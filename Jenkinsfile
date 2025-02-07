@@ -147,18 +147,19 @@ pipeline {
                 }
             }
         }
-            stage('Fail Pipeline if Any Scan Fails') {
-                steps {
-                    script {
-                        if (env.SCAN_FAILED == "true") {
-                            echo "Security scans detected vulnerabilities! Stopping the pipeline."
-                            error("Security vulnerabilities detected! See Jira tickets for details.")
-                        } else {
-                            echo "All security scans passed successfully."
-                        }
+        stage('Fail Pipeline if Any Scan Fails') {
+            steps {
+                script {
+                    if (env.SCAN_FAILED?.trim() == "true") {
+                        echo "Security scans detected vulnerabilities! Stopping the pipeline."
+                        error("Security vulnerabilities detected! See Jira tickets for details.")
+                    } else {
+                        echo "All security scans passed successfully."
                     }
                 }
             }
+        }
+
 
         stage('Initialize Terraform') {
             steps {
