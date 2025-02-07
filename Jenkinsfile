@@ -203,12 +203,13 @@ def createJiraTicket(String issueTitle, String issueDescription) {
                 return
             }
 
-            // Escape JSON special characters
+            // Ensure JSON-safe formatting
             def formattedDescription = issueDescription
                 .replaceAll('"', '\\"')  // Escape double quotes
-                .replaceAll("\n", "\\n") // Escape new lines
+                .replaceAll("\n", "\\n") // Properly format new lines
                 .replaceAll("\r", "")    // Remove carriage returns
 
+            // Ensure description only contains issue summaries
             def jiraPayload = """
             {
                 "fields": {
@@ -254,6 +255,7 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         }
     }
 }
+
 
 
 
