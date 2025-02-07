@@ -71,49 +71,51 @@ pipeline {
             }
         }
 
-stage('Snyk Security Scan') {
-    steps {
-        script {
-            withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
-                sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
+        stage('Snyk Security Scan') {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
+                        sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
 
-                // Run Snyk scan and save output to a file
-                def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low > snyk-results.json || echo 'Scan completed'", returnStatus: true)
-                echo "Snyk Scan Status: ${snykScanStatus}"
+                        // Run Snyk scan and save output to a file
+                        def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low > snyk-results.json || echo 'Scan completed'", returnStatus: true)
+                        echo "Snyk Scan Status: ${snykScanStatus}"
 
-                // Print the full JSON for debugging
-                sh "cat snyk-results.json"
+                        // Print the full JSON for debugging
+                        sh "cat snyk-results.json"
 
-                // Extract only security issue messages
-                def snykFindings = sh(script: """
-                    jq -r '[.infrastructureAsCodeIssues[] | "\\(.title) - Severity: \\(.severity)\\nImpact: \\(.impact)\\nResolution: \\(.resolve)"] | join("\\n\\n")' snyk-results.json || echo 'No issues found'
-                """, returnStdout: true).trim()
-                
-                echo "Extracted Snyk Findings: ${snykFindings}"
+                        // Extract issues as a proper JSON array
+                        sh "jq -c '.infrastructureAsCodeIssues | map({title, severity, impact, resolution})' snyk-results.json > snyk-issues-parsed.json"
 
-                if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
-                    echo "Creating Jira Ticket for Snyk vulnerabilities..."
-                    
-                    // Generate a unique ticket summary to prevent duplicates
-                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-                    def jiraSummary = "Snyk Security Vulnerabilities Detected - ${timestamp}"
+                        // Read the extracted JSON
+                        def snykIssuesList = readJSON(file: "snyk-issues-parsed.json")
 
-                    // Create or update Jira ticket
-                    env.SCAN_FAILED = "true"  // Mark pipeline for failure but continue running
-                    env.JIRA_ISSUE_KEY = createJiraTicket(jiraSummary, snykFindings)
-                    echo "Jira Ticket Created: ${env.JIRA_ISSUE_KEY}"
-                } else {
-                    echo "No actionable security vulnerabilities detected by Snyk."
+                        echo "DEBUG: Total Snyk Issues Found: ${snykIssuesList.size()}"
+
+                        if (snykIssuesList.size() > 0) {
+                            for (issue in snykIssuesList) {
+                                echo "DEBUG: Processing Issue: ${issue}"
+
+                                def issueTitle = "Snyk Issue: ${issue.title} - Severity: ${issue.severity}"
+                                def issueDescription = """
+                                Impact: ${issue.impact}
+                                Resolution: ${issue.resolution}
+                                """
+
+                                echo "Creating Jira Ticket for: ${issueTitle}"
+                                echo "Description:\n${issueDescription}"
+
+                                // Call Jira ticket creation function
+                                def jiraIssueKey = createJiraTicket(issueTitle, issueDescription)
+                                echo "Jira Ticket Created: ${jiraIssueKey}"
+                            }
+                        } else {
+                            echo "DEBUG: No issues to process."
+                        }
+                    }
                 }
             }
         }
-    }
-}
-
-
-
-
-
 
 
         stage('Aqua Trivy Security Scan') {
@@ -157,8 +159,6 @@ stage('Snyk Security Scan') {
                     }
                 }
             }
-
-
 
         stage('Initialize Terraform') {
             steps {
@@ -265,8 +265,3 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         }
     }
 }
-
-
-
-
-
