@@ -25,14 +25,22 @@ pipeline {
                 git branch: 'main', url: 'https://github.com/derrickSh43/basic'
             }
         }
+        stage('Test Jira Ticket Creation') {
+            steps {
+                script {
+                    echo "Testing Jira ticket creation from Jenkins pipeline..."
+                    createJiraTicket("Jenkins Pipeline Test", "This is a test issue created from Jenkins to validate Jira integration.")
+                }
+            }
+        }
 
         stage('Static Code Analysis (SAST)') {
             steps {
                 script {
-                    def scanFailed = false
-
                     withCredentials([string(credentialsId: 'SONARQUBE_TOKEN_ID', variable: 'SONAR_TOKEN')]) {
-                        def sonarStatus = sh(script: '''
+
+                        // Run SonarQube Scan
+                        def scanStatus = sh(script: '''
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
                             -Dsonar.projectKey=derrickSh43_basic \
                             -Dsonar.organization=derricksh43 \
@@ -40,9 +48,23 @@ pipeline {
                             -Dsonar.login=${SONAR_TOKEN}
                         ''', returnStatus: true)
 
-                        if (sonarStatus != 0) {
-                            scanFailed = true
-                            echo "SonarQube scan failed!"
+                        if (scanStatus != 0) {
+
+                            def sonarIssues = sh(script: '''
+                                curl -s -u ${SONAR_TOKEN}: \
+                                "${SONARQUBE_URL}/api/issues/search?componentKeys=derrickSh43_basic&severities=BLOCKER,CRITICAL&statuses=OPEN" | jq -r '.issues[].message' || echo "No issues found"
+                            ''', returnStdout: true).trim()
+
+                            if (!sonarIssues.contains("No issues found")) {
+                                def issueDescription = """ 
+                                    **SonarCloud Security Issues:**
+                                    ${sonarIssues}
+                                """.stripIndent()
+
+                                echo "Creating Jira Ticket for SonarCloud issues..."
+                                createJiraTicket("SonarQube Security Vulnerabilities Detected", issueDescription)
+                                error("SonarQube found security vulnerabilities! Pipeline stopping.")
+                            }
                         }
                     }
                 }
@@ -53,13 +75,32 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
-                        def snykScanStatus = sh(script: '''
-                            snyk iac test --json > snyk-results.json || echo 'Scan completed'
-                        ''', returnStatus: true)
+                        sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
 
+                        // Run Snyk scan and capture exit status
+                        def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low", returnStatus: true)
+                        echo "Snyk Scan Status: ${snykScanStatus}"
+
+                        // If Snyk detects vulnerabilities, extract issues
                         if (snykScanStatus != 0) {
-                            echo "Snyk found security vulnerabilities!"
-                            scanFailed = true
+                            echo "Snyk found security vulnerabilities! Extracting issues..."
+
+                            def snykFindings = sh(script: """
+                                snyk iac test --json --severity-threshold=low | jq -r '[.infrastructureAsCodeIssues[]?.message] | join("\\n")' || echo 'No issues found'
+                            """, returnStdout: true).trim()
+
+                            echo "Snyk Findings: ${snykFindings}"
+
+                            // If issues were found, create a Jira ticket
+                            if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
+                                echo "Creating Jira Ticket for Snyk vulnerabilities..."
+                                createJiraTicket("Snyk Security Vulnerabilities Detected", snykFindings)
+                            } else {
+                                echo "No actionable security vulnerabilities detected by Snyk."
+                            }
+
+                            // Stop the pipeline due to vulnerabilities
+                            error("Snyk found security vulnerabilities! Stopping pipeline.")
                         }
                     }
                 }
@@ -70,41 +111,40 @@ pipeline {
             steps {
                 script {
                     def trivyScanStatus = sh(script: '''
-                        trivy config -f json -o trivy-results.json .
+                        trivy config -f json . | tee trivy-report.json
                     ''', returnStatus: true)
 
-                    if (trivyScanStatus != 0) {
-                        echo "Trivy found security vulnerabilities!"
-                        scanFailed = true
+                    // Ensure the JSON report exists before parsing
+                    if (!fileExists('trivy-report.json')) {
+                        echo "Trivy report not found. Skipping analysis."
+                        return
+                    }
+
+                    def trivyIssues = sh(script: '''
+                        jq -r '.Results[].Misconfigurations[]?.Description // "No issues found"' trivy-report.json
+                    ''', returnStdout: true).trim()
+
+                    if (trivyScanStatus != 0 && !trivyIssues.contains("No issues found")) {
+                        def issueDescription = """ 
+                            **Aqua Trivy Security Issues:**
+                            ${trivyIssues}
+                        """.stripIndent()
+                        
+                        createJiraTicket("Trivy Security Vulnerabilities Detected", issueDescription)
+                        error("Trivy found security vulnerabilities in Terraform files!")
                     }
                 }
             }
         }
 
-        stage('Fail Pipeline if Any Scan Fails') {
-            steps {
-                script {
-                    if (scanFailed) {
-                        createJiraTicket("Security Scan Failed - Critical Issues", "One or more security scans failed. Check SonarQube, Snyk, or Trivy results.")
-                        error("Security scans detected critical vulnerabilities! Failing the pipeline.")
-                    }
-                }
-            }
-        }
 
         stage('Initialize Terraform') {
-            when {
-                expression { return !scanFailed }
-            }
             steps {
                 sh 'terraform init'
             }
         }
 
         stage('Plan Terraform') {
-            when {
-                expression { return !scanFailed }
-            }
             steps {
                 withCredentials([aws(credentialsId: 'AWS_SECRET_ACCESS_KEY', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     sh '''
@@ -117,9 +157,6 @@ pipeline {
         }
 
         stage('Apply Terraform') {
-            when {
-                expression { return !scanFailed }
-            }
             steps {
                 input message: "Approve Terraform Apply?", ok: "Deploy"
                 withCredentials([aws(credentialsId: 'AWS_SECRET_ACCESS_KEY', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
@@ -159,7 +196,7 @@ def createJiraTicket(String issueTitle, String issueDescription) {
             def jiraPayload = """
             {
                 "fields": {
-                    "project": { "key": "${JIRA_PROJECT}" },
+                    "project": { "key": "JENKINS" },
                     "summary": "${issueTitle}",
                     "description": {
                         "type": "doc",
@@ -182,7 +219,7 @@ def createJiraTicket(String issueTitle, String issueDescription) {
             """
 
             def response = sh(script: """
-                curl -X POST "${JIRA_SITE}/rest/api/3/issue" \
+                curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
                 --data '${jiraPayload}'
@@ -196,3 +233,4 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         }
     }
 }
+
