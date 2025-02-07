@@ -84,11 +84,11 @@ stage('Snyk Security Scan') {
                 // Print the full JSON for debugging
                 sh "cat snyk-results.json"
 
-                // Extract issues as a proper JSON array
-                sh "jq -c '.infrastructureAsCodeIssues | map({title, severity, impact, resolution})' snyk-results.json > snyk-issues-parsed.json"
+                // Extract issues as JSON lines and save to file
+                sh "jq -c '.infrastructureAsCodeIssues | map({title, severity, impact, resolution})[]' snyk-results.json > snyk-issues-parsed.json"
 
-                // Read the extracted JSON
-                def snykIssuesList = readJSON(file: "snyk-issues-parsed.json")
+                // Read and process issues line by line
+                def snykIssuesList = sh(script: "cat snyk-issues-parsed.json", returnStdout: true).trim().split("\n")
 
                 echo "DEBUG: Total Snyk Issues Found: ${snykIssuesList.size()}"
 
@@ -96,10 +96,12 @@ stage('Snyk Security Scan') {
                     for (issue in snykIssuesList) {
                         echo "DEBUG: Processing Issue: ${issue}"
 
-                        def issueTitle = "Snyk Issue: ${issue.title} - Severity: ${issue.severity}"
+                        def parsedIssue = readJSON(text: issue)
+
+                        def issueTitle = "Snyk Issue: ${parsedIssue.title} - Severity: ${parsedIssue.severity}"
                         def issueDescription = """
-                        Impact: ${issue.impact}
-                        Resolution: ${issue.resolution}
+                        Impact: ${parsedIssue.impact}
+                        Resolution: ${parsedIssue.resolution}
                         """
 
                         echo "Creating Jira Ticket for: ${issueTitle}"
@@ -116,6 +118,7 @@ stage('Snyk Security Scan') {
         }
     }
 }
+
 
 
 
