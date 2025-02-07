@@ -97,10 +97,14 @@ stage('Snyk Security Scan') {
 
                     for (issue in snykIssuesList) {
                         def parsedIssue = readJSON(text: issue)
-                        def issueTitle = "${parsedIssue.title} - Severity: ${parsedIssue.severity}"
-                        def issueDescription = "Impact: ${parsedIssue.impact}\nResolution: ${parsedIssue.resolution}"
+                        def issueTitle = "Snyk Issue: ${parsedIssue.title} - Severity: ${parsedIssue.severity}"
+                        def issueDescription = """
+                        **Impact:** ${parsedIssue.impact}
+                        
+                        **Resolution:** ${parsedIssue.resolution}
+                        """
 
-                        echo "Creating Jira Ticket: ${issueTitle}"
+                        echo "DEBUG: Creating Jira Ticket with Description: ${issueDescription}"
 
                         // Create a Jira ticket for each issue
                         env.SCAN_FAILED = "true"  // Mark pipeline for failure but continue running
@@ -114,6 +118,7 @@ stage('Snyk Security Scan') {
         }
     }
 }
+
 
 
 
