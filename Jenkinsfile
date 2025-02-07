@@ -121,35 +121,51 @@ pipeline {
         }
 
 
+
         stage('Aqua Trivy Security Scan') {
             steps {
                 script {
                     def trivyScanStatus = sh(script: '''
-                        trivy config -f json . | tee trivy-report.json
+                        trivy config -f json . | tee trivy-report.json || true
                     ''', returnStatus: true)
 
-                    // Ensure the JSON report exists before parsing
                     if (!fileExists('trivy-report.json')) {
                         echo "Trivy report not found. Skipping analysis."
                         return
                     }
 
+                    // Extract issues as JSON
                     def trivyIssues = sh(script: '''
-                        jq -r '.Results[].Misconfigurations[]?.Description // "No issues found"' trivy-report.json
-                    ''', returnStdout: true).trim()
+                        jq -c '.Results[].Misconfigurations[] | {title: .ID, severity: .Severity, description: .Description, resolution: .Resolution}' trivy-report.json || echo ''
+                    ''', returnStdout: true).trim().split("\n")
 
-                    if (trivyScanStatus != 0 && !trivyIssues.contains("No issues found")) {
-                        def issueDescription = """ 
-                            **Aqua Trivy Security Issues:**
-                            ${trivyIssues}
-                        """.stripIndent()
-                        
-                        createJiraTicket("Trivy Security Vulnerabilities Detected", issueDescription)
-                        error("Trivy found security vulnerabilities in Terraform files!")
+                    if (trivyIssues.size() > 0 && trivyIssues[0].trim() != "") {
+                        echo "Security vulnerabilities detected by Trivy!"
+
+                        for (issue in trivyIssues) {
+                            echo "Processing Trivy Issue: ${issue}"
+
+                            def parsedIssue = readJSON(text: issue)
+                            def issueTitle = "Trivy Issue: ${parsedIssue.title} - Severity: ${parsedIssue.severity}"
+                            def issueDescription = """
+                            Description: ${parsedIssue.description}
+                            Resolution: ${parsedIssue.resolution}
+                            """
+
+                            echo "Creating Jira Ticket for: ${issueTitle}"
+                            def jiraIssueKey = createJiraTicket(issueTitle, issueDescription)
+                            echo "Jira Ticket Created: ${jiraIssueKey}"
+
+                            // Mark scan as failed if a Jira ticket is created
+                            env.SCAN_FAILED = "true"
+                        }
+                    } else {
+                        echo "No security vulnerabilities detected by Trivy."
                     }
                 }
             }
         }
+
         stage('Fail Pipeline if Any Scan Fails') {
             steps {
                 script {
