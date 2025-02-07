@@ -91,20 +91,30 @@ stage('Snyk Security Scan') {
                 
                 echo "Extracted Snyk Findings: ${snykFindings}"
 
-                if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
-                    echo "Creating Jira Ticket for Snyk vulnerabilities..."
-                    
-                    // Generate a unique ticket summary to prevent duplicates
-                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-                    def jiraSummary = "Snyk Security Vulnerabilities Detected - ${timestamp}"
+                if (snykIssuesList.size() > 0) {
+                    for (issue in snykIssuesList) {
+                        echo "DEBUG: Raw Issue Data: ${issue}"
 
-                    // Create or update Jira ticket
-                    env.SCAN_FAILED = "true"  // Mark pipeline for failure but continue running
-                    env.JIRA_ISSUE_KEY = createJiraTicket(jiraSummary, snykFindings)
-                    echo "Jira Ticket Created: ${env.JIRA_ISSUE_KEY}"
+                        // Ensure each issue is correctly parsed as JSON
+                        def parsedIssue = readJSON(text: issue)
+
+                        def issueTitle = "Snyk Issue: ${parsedIssue.title} - Severity: ${parsedIssue.severity}"
+                        def issueDescription = """
+                        Impact: ${parsedIssue.impact}
+                        Resolution: ${parsedIssue.resolution}
+                        """
+
+                        echo "Creating Jira Ticket for: ${issueTitle}"
+                        echo "Description:\n${issueDescription}"
+
+                        // Call Jira ticket creation function
+                        def jiraIssueKey = createJiraTicket(issueTitle, issueDescription)
+                        echo "Jira Ticket Created: ${jiraIssueKey}"
+                    }
                 } else {
-                    echo "No actionable security vulnerabilities detected by Snyk."
+                    echo "DEBUG: No issues to process."
                 }
+
             }
         }
     }
