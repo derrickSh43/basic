@@ -203,17 +203,32 @@ def createJiraTicket(String issueTitle, String issueDescription) {
                 return
             }
 
-            // Escape special characters in issue description
+            // Properly escape special characters in the description
             def formattedDescription = issueDescription
-                .replaceAll('"', '\\"') // Escape double quotes
-                .replaceAll("\n", "\\\\n") // Escape new lines
+                .replaceAll('"', '\\"')  // Escape double quotes
+                .replaceAll("\n", "\\n") // Escape new lines
 
+            // Correct JSON structure for Jira API
             def jiraPayload = """
             {
                 "fields": {
-                    "project": { "key": "${JIRA_PROJECT}" },
+                    "project": { "key": "JENKINS" },
                     "summary": "${issueTitle}",
-                    "description": "${formattedDescription}",
+                    "description": {
+                        "type": "doc",
+                        "version": 1,
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "${formattedDescription}"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
                     "issuetype": { "name": "Bug" }
                 }
             }
@@ -221,14 +236,17 @@ def createJiraTicket(String issueTitle, String issueDescription) {
 
             echo "DEBUG: Sending Jira Payload: ${jiraPayload}"
 
+            // Use echo instead of single quotes for proper JSON handling
             def response = sh(script: """
-                curl -X POST "${JIRA_SITE}/rest/api/3/issue" \
+                curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                 --user "$JIRA_USER:$JIRA_TOKEN" \
                 -H "Content-Type: application/json" \
-                --data '${jiraPayload}'
+                --data @- <<EOF
+                ${jiraPayload}
+                EOF
             """, returnStdout: true).trim()
 
-            echo "DEBUG: Jira Response: ${response}"
+            echo "Jira Response: ${response}"
 
             if (!response.contains('"key"')) {
                 error("Jira ticket creation failed! Response: ${response}")
