@@ -241,7 +241,7 @@ def createJiraTicket(String issueTitle, String issueDescription) {
             writeFile file: 'jira_payload.json', text: jiraPayload
 
             withEnv(["JIRA_CREDS=${JIRA_USER}:${JIRA_TOKEN}"]) {
-                // Search for an existing Jira issue with the same title
+                //  **Step 1: Search for an existing Jira ticket**
                 def searchQuery = URLEncoder.encode("project=JENKINS AND summary~\"${issueTitle}\" AND status != Done", "UTF-8")
                 def searchResponse = sh(script: '''
                     curl -s -u "$JIRA_CREDS" \
@@ -251,13 +251,15 @@ def createJiraTicket(String issueTitle, String issueDescription) {
 
                 def existingIssues = readJSON(text: searchResponse)
 
+                //  **Step 2: If an existing ticket is found, reuse it**
                 if (existingIssues.issues.size() > 0) {
-                    echo "Jira issue already exists: ${existingIssues.issues[0].key}. Skipping ticket creation."
+                    echo " Jira issue already exists: ${existingIssues.issues[0].key}. Skipping ticket creation."
                     return existingIssues.issues[0].key
                 }
 
-                echo "No existing Jira issue found. Creating a new ticket..."
+                echo " No existing Jira issue found. Creating a new ticket..."
 
+                //  **Step 3: Create a new Jira issue**
                 def createResponse = sh(script: '''
                     curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
                     -u "$JIRA_CREDS" \
@@ -270,7 +272,7 @@ def createJiraTicket(String issueTitle, String issueDescription) {
                 def createdIssue = readJSON(text: createResponse)
 
                 if (!createdIssue.containsKey("key")) {
-                    error("Jira ticket creation failed! Response: ${createResponse}")
+                    error(" Jira ticket creation failed! Response: ${createResponse}")
                 }
 
                 return createdIssue.key
@@ -278,3 +280,4 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         }
     }
 }
+
