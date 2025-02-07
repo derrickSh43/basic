@@ -108,6 +108,9 @@ pipeline {
                                 // Call Jira ticket creation function
                                 def jiraIssueKey = createJiraTicket(issueTitle, issueDescription)
                                 echo "Jira Ticket Created: ${jiraIssueKey}"
+
+                                // Mark the scan as failed if a Jira ticket is created
+                                env.SCAN_FAILED = "true"
                             }
                         } else {
                             echo "DEBUG: No issues to process."
