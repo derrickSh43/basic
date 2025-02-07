@@ -71,41 +71,45 @@ pipeline {
             }
         }
 
-        stage('Snyk Security Scan') {
-            steps {
-                script {
-                    withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
-                        sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
+stage('Snyk Security Scan') {
+    steps {
+        script {
+            withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
+                sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
 
-                        // Run scan and save output to a file
-                        def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low> snyk-results.json || echo 'Scan completed'", returnStatus: true)
-                        echo "Snyk Scan Status: ${snykScanStatus}"
+                // Run Snyk scan and save output to a file
+                def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low > snyk-results.json || echo 'Scan completed'", returnStatus: true)
+                echo "Snyk Scan Status: ${snykScanStatus}"
 
-                        // Print the full JSON for debugging
-                        sh "cat snyk-results.json"
+                // Print the full JSON for debugging
+                sh "cat snyk-results.json"
 
-                        // Extract issues using jq
-                        def snykFindings = sh(script: "jq '.' snyk-results.json", returnStdout: true).trim()
-                        echo "Raw JSON Extracted: ${snykFindings}"
+                // Extract only security issue messages
+                def snykFindings = sh(script: """
+                    jq -r '[.infrastructureAsCodeIssues[] | "\\(.title) - Severity: \\(.severity)\\nImpact: \\(.impact)\\nResolution: \\(.resolve)"] | join("\\n\\n")' snyk-results.json || echo 'No issues found'
+                """, returnStdout: true).trim()
+                
+                echo "Extracted Snyk Findings: ${snykFindings}"
 
-                        if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
-                            echo "Creating Jira Ticket for Snyk vulnerabilities..."
-                            
-                            // Generate a unique ticket summary to prevent duplicates
-                            def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-                            def jiraSummary = "Snyk Security Vulnerabilities Detected - ${timestamp}"
+                if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
+                    echo "Creating Jira Ticket for Snyk vulnerabilities..."
+                    
+                    // Generate a unique ticket summary to prevent duplicates
+                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
+                    def jiraSummary = "Snyk Security Vulnerabilities Detected - ${timestamp}"
 
-                            // Create or update Jira ticket
-                            env.SCAN_FAILED = "true"  // Mark pipeline for failure but continue running
-                            env.JIRA_ISSUE_KEY = createJiraTicket(jiraSummary, snykFindings)
-                            echo "Jira Ticket Created: ${env.JIRA_ISSUE_KEY}"
-                        } else {
-                            echo "No actionable security vulnerabilities detected by Snyk."
-                        }
-                    }
+                    // Create or update Jira ticket
+                    env.SCAN_FAILED = "true"  // Mark pipeline for failure but continue running
+                    env.JIRA_ISSUE_KEY = createJiraTicket(jiraSummary, snykFindings)
+                    echo "Jira Ticket Created: ${env.JIRA_ISSUE_KEY}"
+                } else {
+                    echo "No actionable security vulnerabilities detected by Snyk."
                 }
             }
         }
+    }
+}
+
 
 
 
