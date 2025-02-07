@@ -84,24 +84,33 @@ stage('Snyk Security Scan') {
                 // Print the full JSON for debugging
                 sh "cat snyk-results.json"
 
-                // Extract only security issue messages
-                def snykFindings = sh(script: """
-                    jq -r '[.infrastructureAsCodeIssues[] | "\\(.title) - Severity: \\(.severity)\\nImpact: \\(.impact)\\nResolution: \\(.resolve)"] | join("\\n\\n")' snyk-results.json || echo 'No issues found'
+                // Extract individual security issues
+                def snykIssues = sh(script: """
+                    jq -c '.infrastructureAsCodeIssues[] | {title: .title, severity: .severity, impact: .impact, resolution: .resolve}' snyk-results.json || echo ''
                 """, returnStdout: true).trim()
-                
-                echo "Extracted Snyk Findings: ${snykFindings}"
 
-                if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
-                    echo "Creating Jira Ticket for Snyk vulnerabilities..."
-                    
-                    // Generate a unique ticket summary to prevent duplicates
-                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
-                    def jiraSummary = "Snyk Security Vulnerabilities Detected - ${timestamp}"
+                if (snykIssues) {
+                    echo "Snyk Issues Found: ${snykIssues}"
 
-                    // Create or update Jira ticket
-                    env.SCAN_FAILED = "true"  // Mark pipeline for failure but continue running
-                    env.JIRA_ISSUE_KEY = createJiraTicket(jiraSummary, snykFindings)
-                    echo "Jira Ticket Created: ${env.JIRA_ISSUE_KEY}"
+                    // Convert JSON array to a Groovy list
+                    def snykIssuesList = snykIssues.readLines()
+
+                    for (issue in snykIssuesList) {
+                        def parsedIssue = readJSON(text: issue)
+                        def issueTitle = "Snyk Issue: ${parsedIssue.title} - Severity: ${parsedIssue.severity}"
+                        def issueDescription = """
+                        **Impact:** ${parsedIssue.impact}
+
+                        **Resolution:** ${parsedIssue.resolution}
+                        """
+
+                        echo "Creating Jira Ticket for: ${issueTitle}"
+
+                        // Create a Jira ticket for each issue
+                        env.SCAN_FAILED = "true"  // Mark pipeline for failure but continue running
+                        def jiraIssueKey = createJiraTicket(issueTitle, issueDescription)
+                        echo "Jira Ticket Created: ${jiraIssueKey}"
+                    }
                 } else {
                     echo "No actionable security vulnerabilities detected by Snyk."
                 }
@@ -109,6 +118,7 @@ stage('Snyk Security Scan') {
         }
     }
 }
+
 
 
 
