@@ -276,5 +276,3 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         }
     }
 }
-
-
