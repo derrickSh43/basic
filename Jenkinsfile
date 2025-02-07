@@ -75,37 +75,36 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
-                        sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
+                        sh "snyk auth ${SNYK_TOKEN}"
 
-                        // Run Snyk scan and capture exit status
-                        def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low", returnStatus: true)
+                        // Run scan and save output to a file
+                        def snykScanStatus = sh(script: "snyk iac test --json > snyk-results.json || echo 'Scan completed'", returnStatus: true)
                         echo "Snyk Scan Status: ${snykScanStatus}"
 
-                        // If Snyk detects vulnerabilities, extract issues
-                        if (snykScanStatus != 0) {
-                            echo "Snyk found security vulnerabilities! Extracting issues..."
+                        // Extract issues using jq
+                        def snykFindings = sh(script: "jq -r '[.infrastructureAsCodeIssues[]?.message] | join(\"\\n\")' snyk-results.json || echo 'No issues found'", returnStdout: true).trim()
+                        echo "Snyk Findings: ${snykFindings}"
 
-                            def snykFindings = sh(script: """
-                                snyk iac test --json --severity-threshold=low | jq -r '[.infrastructureAsCodeIssues[]?.message] | join("\\n")' || echo 'No issues found'
-                            """, returnStdout: true).trim()
+                        if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
+                            echo "Creating Jira Ticket for Snyk vulnerabilities..."
+                            
+                            // Generate a unique ticket summary to prevent duplicates
+                            def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
+                            def jiraSummary = "Snyk Security Vulnerabilities Detected - ${timestamp}"
 
-                            echo "Snyk Findings: ${snykFindings}"
-
-                            // If issues were found, create a Jira ticket
-                            if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
-                                echo "Creating Jira Ticket for Snyk vulnerabilities..."
-                                createJiraTicket("Snyk Security Vulnerabilities Detected", snykFindings)
-                            } else {
-                                echo "No actionable security vulnerabilities detected by Snyk."
-                            }
-
-                            // Stop the pipeline due to vulnerabilities
-                            error("Snyk found security vulnerabilities! Stopping pipeline.")
+                            // Create or update Jira ticket
+                            env.SCAN_FAILED = "true"  // Mark pipeline for failure but continue running
+                            env.JIRA_ISSUE_KEY = createJiraTicket(jiraSummary, snykFindings)
+                            echo "Jira Ticket Created: ${env.JIRA_ISSUE_KEY}"
+                        } else {
+                            echo "No actionable security vulnerabilities detected by Snyk."
                         }
                     }
                 }
             }
         }
+
+
 
         stage('Aqua Trivy Security Scan') {
             steps {
