@@ -75,15 +75,18 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'SNYK_AUTH_TOKEN_ID', variable: 'SNYK_TOKEN')]) {
-                        sh "snyk auth ${SNYK_TOKEN}"
+                        sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
 
                         // Run scan and save output to a file
-                        def snykScanStatus = sh(script: "snyk iac test --json > snyk-results.json || echo 'Scan completed'", returnStatus: true)
+                        def snykScanStatus = sh(script: "snyk iac test --json --severity-threshold=low> snyk-results.json || echo 'Scan completed'", returnStatus: true)
                         echo "Snyk Scan Status: ${snykScanStatus}"
 
+                        // Print the full JSON for debugging
+                        sh "cat snyk-results.json"
+
                         // Extract issues using jq
-                        def snykFindings = sh(script: "jq -r '[.infrastructureAsCodeIssues[]?.message] | join(\"\\n\")' snyk-results.json || echo 'No issues found'", returnStdout: true).trim()
-                        echo "Snyk Findings: ${snykFindings}"
+                        def snykFindings = sh(script: "jq '.' snyk-results.json", returnStdout: true).trim()
+                        echo "Raw JSON Extracted: ${snykFindings}"
 
                         if (!snykFindings.contains("No issues found") && snykFindings.trim()) {
                             echo "Creating Jira Ticket for Snyk vulnerabilities..."
@@ -131,6 +134,16 @@ pipeline {
                         
                         createJiraTicket("Trivy Security Vulnerabilities Detected", issueDescription)
                         error("Trivy found security vulnerabilities in Terraform files!")
+                    }
+                }
+            }
+        }
+        stage('Fail Pipeline if Any Scan Fails') {
+            steps {
+                script {
+                    if (env.SCAN_FAILED == "true") {
+                        createJiraTicket("Security Scan Failed - Critical Issues", "One or more security scans failed. Check SonarQube, Snyk, or Trivy results.")
+                        error("Security scans detected critical vulnerabilities! Failing the pipeline.")
                     }
                 }
             }
