@@ -208,23 +208,6 @@ def createJiraTicket(String issueTitle, String issueDescription) {
         withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN'),
                          string(credentialsId: 'JIRA_EMAIL', variable: 'JIRA_USER')]) {
 
-            // Search for an existing Jira issue with the same title
-            def searchQuery = URLEncoder.encode("project=JENKINS AND summary~\"${issueTitle}\" AND status != Done", "UTF-8")
-            def searchResponse = sh(script: """
-                curl -s -u "$JIRA_USER:$JIRA_TOKEN" \
-                -X GET "https://derrickweil.atlassian.net/rest/api/3/search?jql=${searchQuery}" \
-                -H "Accept: application/json"
-            """, returnStdout: true).trim()
-
-            def existingIssues = readJSON(text: searchResponse)
-
-            if (existingIssues.issues.size() > 0) {
-                echo "Jira issue already exists: ${existingIssues.issues[0].key}. Skipping ticket creation."
-                return existingIssues.issues[0].key
-            }
-
-            echo "No existing Jira issue found. Creating a new ticket..."
-
             def formattedDescription = issueDescription
                 .replaceAll('"', '\\"')  
                 .replaceAll("\n", "\\n") 
@@ -257,22 +240,41 @@ def createJiraTicket(String issueTitle, String issueDescription) {
 
             writeFile file: 'jira_payload.json', text: jiraPayload
 
-            def createResponse = sh(script: '''
-                curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
-                --user "$JIRA_USER:$JIRA_TOKEN" \
-                -H "Content-Type: application/json" \
-                --data @jira_payload.json
-            ''', returnStdout: true).trim()
+            withEnv(["JIRA_CREDS=${JIRA_USER}:${JIRA_TOKEN}"]) {
+                // Search for an existing Jira issue with the same title
+                def searchQuery = URLEncoder.encode("project=JENKINS AND summary~\"${issueTitle}\" AND status != Done", "UTF-8")
+                def searchResponse = sh(script: '''
+                    curl -s -u "$JIRA_CREDS" \
+                    -X GET "https://derrickweil.atlassian.net/rest/api/3/search?jql=''' + searchQuery + '''" \
+                    -H "Accept: application/json"
+                ''', returnStdout: true).trim()
 
-            echo "Jira Response: ${createResponse}"
+                def existingIssues = readJSON(text: searchResponse)
 
-            def createdIssue = readJSON(text: createResponse)
+                if (existingIssues.issues.size() > 0) {
+                    echo "Jira issue already exists: ${existingIssues.issues[0].key}. Skipping ticket creation."
+                    return existingIssues.issues[0].key
+                }
 
-            if (!createdIssue.containsKey("key")) {
-                error("Jira ticket creation failed! Response: ${createResponse}")
+                echo "No existing Jira issue found. Creating a new ticket..."
+
+                def createResponse = sh(script: '''
+                    curl -X POST "https://derrickweil.atlassian.net/rest/api/3/issue" \
+                    -u "$JIRA_CREDS" \
+                    -H "Content-Type: application/json" \
+                    --data @jira_payload.json
+                ''', returnStdout: true).trim()
+
+                echo "Jira Response: ${createResponse}"
+
+                def createdIssue = readJSON(text: createResponse)
+
+                if (!createdIssue.containsKey("key")) {
+                    error("Jira ticket creation failed! Response: ${createResponse}")
+                }
+
+                return createdIssue.key
             }
-
-            return createdIssue.key
         }
     }
 }
