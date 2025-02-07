@@ -84,24 +84,22 @@ stage('Snyk Security Scan') {
                 // Print the full JSON for debugging
                 sh "cat snyk-results.json"
 
-                // Extract only security issue messages
-                def snykFindings = sh(script: """
-                    jq -r '[.infrastructureAsCodeIssues[] | "\\(.title) - Severity: \\(.severity)\\nImpact: \\(.impact)\\nResolution: \\(.resolve)"] | join("\\n\\n")' snyk-results.json || echo 'No issues found'
-                """, returnStdout: true).trim()
-                
-                echo "Extracted Snyk Findings: ${snykFindings}"
+                // Extract issues as a proper JSON array
+                sh "jq -c '.infrastructureAsCodeIssues | map({title, severity, impact, resolution})' snyk-results.json > snyk-issues-parsed.json"
+
+                // Read the extracted JSON
+                def snykIssuesList = readJSON(file: "snyk-issues-parsed.json")
+
+                echo "DEBUG: Total Snyk Issues Found: ${snykIssuesList.size()}"
 
                 if (snykIssuesList.size() > 0) {
                     for (issue in snykIssuesList) {
-                        echo "DEBUG: Raw Issue Data: ${issue}"
+                        echo "DEBUG: Processing Issue: ${issue}"
 
-                        // Ensure each issue is correctly parsed as JSON
-                        def parsedIssue = readJSON(text: issue)
-
-                        def issueTitle = "Snyk Issue: ${parsedIssue.title} - Severity: ${parsedIssue.severity}"
+                        def issueTitle = "Snyk Issue: ${issue.title} - Severity: ${issue.severity}"
                         def issueDescription = """
-                        Impact: ${parsedIssue.impact}
-                        Resolution: ${parsedIssue.resolution}
+                        Impact: ${issue.impact}
+                        Resolution: ${issue.resolution}
                         """
 
                         echo "Creating Jira Ticket for: ${issueTitle}"
@@ -114,11 +112,11 @@ stage('Snyk Security Scan') {
                 } else {
                     echo "DEBUG: No issues to process."
                 }
-
             }
         }
     }
 }
+
 
 
 
