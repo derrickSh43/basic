@@ -16,20 +16,6 @@ pipeline {
 
     stages {
 
-stage('Debug Vault Token') {
-            steps {
-                script {
-                    sh '''
-                        export VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="5f2c491a-9739-95ad-19bc-71fc8a428f35" secret_id="f3026405-d744-c084-67d3-620e0412241e")
-                        echo "Manual VAULT_TOKEN=$VAULT_TOKEN" > token_debug.txt
-                        vault token lookup >> token_debug.txt 2>&1
-                        vault kv get secret/aws-creds >> token_debug.txt 2>&1
-                        vault read aws/creds/jenkins-role >> token_debug.txt 2>&1
-                        cat token_debug.txt
-                    '''
-                }
-            }
-        }
         stage('Fetch Vault Credentials') {
             steps {
                 script {
@@ -72,24 +58,21 @@ stage('Debug Vault Token') {
             }
         }
 
-        stage('Fetch AWS STS Credentials') {
+stage('Fetch AWS STS Credentials') {
             steps {
                 script {
-                    withVault(
-                        configuration: [
-                            vaultUrl: "${VAULT_ADDR}",
-                            vaultCredentialId: 'vault-approle'
-                        ],
-                        vaultSecrets: [
-                            [path: 'aws/creds/jenkins-role', secretValues: [
-                                [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
-                                [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key'],
-                                [envVar: 'AWS_SESSION_TOKEN', vaultKey: 'security_token']
-                            ]]
-                        ]
-                    ) {
+                    // Fetch STS credentials directly with vault CLI
+                    sh '''
+                        export VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="5f2c491a-9739-95ad-19bc-71fc8a428f35" secret_id="f3026405-d744-c084-67d3-620e0412241e")
+                        vault read -format=json aws/creds/jenkins-role > sts_creds.json
+                        export AWS_ACCESS_KEY_ID=$(jq -r '.data.access_key' sts_creds.json)
+                        export AWS_SECRET_ACCESS_KEY=$(jq -r '.data.secret_key' sts_creds.json)
+                        export AWS_SESSION_TOKEN=$(jq -r '.data.security_token' sts_creds.json)
                         echo "STS credentials fetched successfully"
-                    }
+                        echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID"
+                        echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" | sed 's/./*/g'
+                        echo "AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN" | sed 's/./*/g'
+                    '''
                 }
             }
         }
