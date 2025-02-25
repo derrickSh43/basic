@@ -14,22 +14,6 @@ pipeline {
         VAULT_ADDR = "http://18.209.67.85:8200"
     }
 
-    stages {
-        stage('Debug Vault Token') {
-            steps {
-                script {
-                    // Fetch token directly without withVault
-                    sh '''
-                        export VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="5f2c491a-9739-95ad-19bc-71fc8a428f35" secret_id="f3026405-d744-c084-67d3-620e0412241e")
-                        echo "VAULT_TOKEN=$VAULT_TOKEN" > token_debug.txt
-                        vault token lookup >> token_debug.txt 2>&1 || echo "Token lookup failed" >> token_debug.txt
-                        vault read aws/creds/jenkins-role >> token_debug.txt 2>&1 || echo "STS read failed" >> token_debug.txt
-                        cat token_debug.txt
-                    '''
-                }
-            }
-        }
-
         stage('Fetch Vault Credentials') {
             steps {
                 script {
