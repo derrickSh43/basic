@@ -57,6 +57,23 @@ stage('Fetch Vault Credentials') {
                 }
             }
         }
+        stage('Debug Vault Token') {
+    steps {
+        script {
+            withVault(
+                configuration: [
+                    vaultUrl: "${VAULT_ADDR}",
+                    vaultCredentialId: 'vault-approle'
+                ],
+                vaultSecrets: [
+                    [path: 'aws/creds/jenkins-role', secretValues: []]  // Dummy fetch to force token generation
+                ]
+            ) {
+                sh 'vault token lookup'  // Runs in Jenkins agent with Vault token
+            }
+        }
+    }
+}
         stage('Fetch AWS STS Credentials') {
             steps {
                 script {
