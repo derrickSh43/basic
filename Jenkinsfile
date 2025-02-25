@@ -61,21 +61,27 @@ pipeline {
 stage('Fetch AWS STS Credentials') {
             steps {
                 script {
-                    // Fetch STS credentials directly with vault CLI
-                    sh '''
-                        export VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="5f2c491a-9739-95ad-19bc-71fc8a428f35" secret_id="f3026405-d744-c084-67d3-620e0412241e")
-                        vault read -format=json aws/creds/jenkins-role > sts_creds.json
-                        export AWS_ACCESS_KEY_ID=$(jq -r '.data.access_key' sts_creds.json)
-                        export AWS_SECRET_ACCESS_KEY=$(jq -r '.data.secret_key' sts_creds.json)
-                        export AWS_SESSION_TOKEN=$(jq -r '.data.security_token' sts_creds.json)
-                        echo "STS credentials fetched successfully"
-                        echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID"
-                        echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" | sed 's/./*/g'
-                        echo "AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN" | sed 's/./*/g'
-                    '''
+                    withCredentials([[
+                        $class: 'VaultAppRoleCredentialBinding',
+                        credentialsId: 'vault-approle',
+                        variableRoleId: 'VAULT_ROLE_ID',
+                        variableSecretId: 'VAULT_SECRET_ID'
+                    ]]) {
+                        sh '''
+                            export VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID")
+                            vault read -format=json aws/creds/jenkins-role > sts_creds.json
+                            export AWS_ACCESS_KEY_ID=$(jq -r '.data.access_key' sts_creds.json)
+                            export AWS_SECRET_ACCESS_KEY=$(jq -r '.data.secret_key' sts_creds.json)
+                            export AWS_SESSION_TOKEN=$(jq -r '.data.security_token' sts_creds.json)
+                            echo "STS credentials fetched successfully"
+                            # Avoid logging sensitive data
+                            echo "AWS_ACCESS_KEY_ID is set"
+                            echo "AWS_SECRET_ACCESS_KEY is set"
+                            echo "AWS_SESSION_TOKEN is set"
+                        '''
+                    }
                 }
             }
-        }
         
         stage('Checkout Code') {
             steps {
