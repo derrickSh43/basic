@@ -32,7 +32,7 @@ pipeline {
                                     [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key']
                                 ]],
                                 [path: 'secret/sonarqube', secretValues: [
-                                    [envVar: 'SONAR_TOKEN', vaultKey: 'token']
+                                    [envVar: 'SONAR_TOKEN_TEMP', vaultKey: 'token']
                                 ]],
                                 [path: 'secret/snyk', secretValues: [
                                     [envVar: 'SNYK_TOKEN_TEMP', vaultKey: 'token']
