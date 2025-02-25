@@ -14,6 +14,25 @@ pipeline {
         VAULT_ADDR = "http://3.91.233.45:8200"
     }
 
+    stage('Fetch AWS STS Credentials') {
+        steps {
+            withVault(
+                configuration: [
+                    vaultUrl: "${VAULT_ADDR}",
+                    vaultCredentialId: 'AppRole'
+                ],
+                vaultSecrets: [
+                    [path: 'aws/creds/jenkins-role', secretValues: [
+                        [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
+                        [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key'],
+                        [envVar: 'AWS_SESSION_TOKEN', vaultKey: 'security_token']
+                    ]]
+                ]
+            ) {
+                sh 'aws sts get-caller-identity'
+            }
+        }
+    }
     stages {
         stage('Fetch Vault Credentials') {
             steps {
