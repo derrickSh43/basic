@@ -50,41 +50,6 @@ pipeline {
             }
         }
 
-            stage('Fetch Vault Token') {
-                steps {
-                    script {
-                        withCredentials([
-                            string(credentialsId: 'vault-role-id', variable: 'ROLE_ID'),
-                            string(credentialsId: 'vault-secret-id', variable: 'SECRET_ID')
-                        ]) {
-                            echo "Attempting to fetch Vault token from ${VAULT_ADDR}/v1/auth/approle/login"
-                            // Define the curl command with proper JSON syntax
-                            def curlCommand = 'curl -s --request POST --data \'{"role_id":"\'"$ROLE_ID"\'","secret_id":"\'"$SECRET_ID"\'"}\' "$VAULT_ADDR/v1/auth/approle/login" 2>&1'
-                            // Log the masked command
-                            echo "Executing command: ${curlCommand.replace(ROLE_ID, '****').replace(SECRET_ID, '****')}"
-                            def tokenResponse = sh(script: curlCommand, returnStdout: true).trim()
-
-                            echo "Raw Vault response: ${tokenResponse}"
-                            try {
-                                def tokenJson = readJSON(text: tokenResponse)
-                                echo "Parsed JSON: ${tokenJson.toString()}"
-                                if (!tokenJson.auth?.client_token) {
-                                    echo "No client_token found in response"
-                                    error("Failed to obtain Vault token: Authentication error - response: ${tokenResponse}")
-                                } else {
-                                    echo "Vault token obtained successfully"
-                                    wrap([$class: 'MaskPasswordsBuildWrapper']) {
-                                        env.VAULT_TOKEN = tokenJson.auth.client_token
-                                    }
-                                }
-                            } catch (Exception e) {
-                                echo "Error parsing Vault response: ${e.message}"
-                                error("Failed to obtain Vault token: Parsing error - response: ${tokenResponse}")
-                            }
-                        }
-                    }
-                }
-            }
 
         stage('Checkout Code') {
             steps {
