@@ -50,48 +50,41 @@ pipeline {
             }
         }
 
-        stage('Fetch Vault Credentials') {
-            steps {
-                script {
-                    // Use the dynamically obtained VAULT_TOKEN
-                    def awsCreds = sh(script: """
-                        curl -s -H \"X-Vault-Token: ${VAULT_TOKEN}\" \
-                        ${VAULT_ADDR}/v1/secret/data/aws-creds | jq -r '.data.data'
-                    """, returnStdout: true).trim()
-                    def aws = readJSON(text: awsCreds)
-                    env.AWS_ACCESS_KEY_ID = aws.access_key
-                    env.AWS_SECRET_ACCESS_KEY = aws.secret_key
-                    env.AWS_SESSION_TOKEN = aws.session_token
-                    sh 'aws sts get-caller-identity'
+            stage('Fetch Vault Token') {
+                steps {
+                    script {
+                        withCredentials([
+                            string(credentialsId: 'vault-role-id', variable: 'ROLE_ID'),
+                            string(credentialsId: 'vault-secret-id', variable: 'SECRET_ID')
+                        ]) {
+                            echo "Attempting to fetch Vault token from ${VAULT_ADDR}/v1/auth/approle/login"
+                            // Define the curl command with proper JSON syntax
+                            def curlCommand = 'curl -s --request POST --data \'{"role_id":"\'"$ROLE_ID"\'","secret_id":"\'"$SECRET_ID"\'"}\' "$VAULT_ADDR/v1/auth/approle/login" 2>&1'
+                            // Log the masked command
+                            echo "Executing command: ${curlCommand.replace(ROLE_ID, '****').replace(SECRET_ID, '****')}"
+                            def tokenResponse = sh(script: curlCommand, returnStdout: true).trim()
 
-                    env.SONAR_TOKEN = sh(script: """
-                        curl -s -H \"X-Vault-Token: ${VAULT_TOKEN}\" \
-                        ${VAULT_ADDR}/v1/secret/data/sonarqube | jq -r '.data.data.token'
-                    """, returnStdout: true).trim()
-
-                    env.SNYK_TOKEN = sh(script: """
-                        curl -s -H \"X-Vault-Token: ${VAULT_TOKEN}\" \
-                        ${VAULT_ADDR}/v1/secret/data/snyk | jq -r '.data.data.token'
-                    """, returnStdout: true).trim()
-
-                    def jfrogCreds = sh(script: """
-                        curl -s -H \"X-Vault-Token: ${VAULT_TOKEN}\" \
-                        ${VAULT_ADDR}/v1/secret/data/jfrog | jq -r '.data.data'
-                    """, returnStdout: true).trim()
-                    def jfrog = readJSON(text: jfrogCreds)
-                    env.ARTIFACTORY_USER = jfrog.username
-                    env.ARTIFACTORY_API_KEY = jfrog.api_key
-
-                    def jiraCreds = sh(script: """
-                        curl -s -H \"X-Vault-Token: ${VAULT_TOKEN}\" \
-                        ${VAULT_ADDR}/v1/secret/data/jira | jq -r '.data.data'
-                    """, returnStdout: true).trim()
-                    def jira = readJSON(text: jiraCreds)
-                    env.JIRA_USER = jira.email
-                    env.JIRA_TOKEN = jira.token
+                            echo "Raw Vault response: ${tokenResponse}"
+                            try {
+                                def tokenJson = readJSON(text: tokenResponse)
+                                echo "Parsed JSON: ${tokenJson.toString()}"
+                                if (!tokenJson.auth?.client_token) {
+                                    echo "No client_token found in response"
+                                    error("Failed to obtain Vault token: Authentication error - response: ${tokenResponse}")
+                                } else {
+                                    echo "Vault token obtained successfully"
+                                    wrap([$class: 'MaskPasswordsBuildWrapper']) {
+                                        env.VAULT_TOKEN = tokenJson.auth.client_token
+                                    }
+                                }
+                            } catch (Exception e) {
+                                echo "Error parsing Vault response: ${e.message}"
+                                error("Failed to obtain Vault token: Parsing error - response: ${tokenResponse}")
+                            }
+                        }
+                    }
                 }
             }
-        }
 
         stage('Checkout Code') {
             steps {
