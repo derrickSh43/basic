@@ -14,6 +14,7 @@ pipeline {
         VAULT_ADDR = "http://18.209.67.85:8200"
     }
 
+    stages {
         stage('Fetch Vault Credentials') {
             steps {
                 script {
