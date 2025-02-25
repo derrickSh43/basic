@@ -25,7 +25,7 @@ pipeline {
                         echo "Attempting to fetch Vault token from ${VAULT_ADDR}/v1/auth/approle/login"
                         // Explicitly define the command with proper JSON
                         def curlCommand = 'curl -s --request POST --data \'{"role_id":"\'"$ROLE_ID"\'","secret_id":"\'"$SECRET_ID"\'"}\' "$VAULT_ADDR/v1/auth/approle/login" 2>&1'
-                        echo "Executing command: ${curlCommand.replace(ROLE_ID, '****').replace(SECRET_ID, '****')}"  # Log masked command
+                        echo "Executing command: ${curlCommand.replace(ROLE_ID, '****').replace(SECRET_ID, '****')}" 
                         def tokenResponse = sh(script: curlCommand, returnStdout: true).trim()
 
                         echo "Raw Vault response: ${tokenResponse}"
