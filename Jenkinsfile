@@ -12,6 +12,8 @@ pipeline {
         MODULE_NAME = "your-module-name"
         VERSION = "1.1"
         VAULT_ADDR = "http://18.209.67.85:8200"
+        JFROG_CLI_BUILD_NAME = "basic-build"  // Build name for JFrog
+        JFROG_CLI_BUILD_NUMBER = "${BUILD_NUMBER}"  // Jenkins build number
     }
 
     stages {
@@ -172,7 +174,7 @@ stage('Snyk Security Scan') {
                 """
             }
         }
-        stage('JFrog Xray Scan') {
+stage('JFrog Xray Scan') {
             steps {
                 script {
                     def xrayStatus = sh(script: """
@@ -181,7 +183,7 @@ stage('Snyk Security Scan') {
                         --url="${ARTIFACTORY_URL}" \\
                         --user="${ARTIFACTORY_USER}" \\
                         --apikey="${ARTIFACTORY_API_KEY}" \\
-                        "${ARTIFACTORY_REPO}/${NAMESPACE}/${MODULE_NAME}/${VERSION}/" > xray-scan.json 2>&1
+                        "${JFROG_CLI_BUILD_NAME}" "${JFROG_CLI_BUILD_NUMBER}" > xray-scan.json 2>&1
                     """, returnStatus: true)
 
                     def xrayOutput = readFile('xray-scan.json').trim()
@@ -192,8 +194,9 @@ stage('Snyk Security Scan') {
                         }
                         env.SCAN_FAILED = "true"
                     } else {
-                        def xrayIssues = readJSON(file: "xray-scan.json").violations
-                        if (xrayIssues?.size() > 0) {
+                        def xrayResults = readJSON(file: "xray-scan.json")
+                        def xrayIssues = xrayResults.violations ?: []
+                        if (xrayIssues.size() > 0) {
                             def issueDetails = xrayIssues.collect { issue ->
                                 "Issue: ${issue.summary}\\nSeverity: ${issue.severity}\\nDescription: ${issue.description}\\nCVE: ${issue.cve ?: 'N/A'}"
                             }.join('\\n\\n')
@@ -208,6 +211,7 @@ stage('Snyk Security Scan') {
                 }
             }
         }
+    
     
 
         stage('Fail Pipeline if Scans Fail') {
