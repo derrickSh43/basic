@@ -15,7 +15,7 @@ pipeline {
     }
 
     stages {
-        stage('Debug Vault Token') {
+stage('Debug Vault Token') {
             steps {
                 script {
                     withVault(
@@ -24,11 +24,14 @@ pipeline {
                             vaultCredentialId: 'vault-approle'
                         ],
                         vaultSecrets: [
-                            [path: 'aws/creds/jenkins-role', secretValues: []]  // Trigger token fetch
+                            [path: 'secret/data/aws-creds', secretValues: []]  // Dummy fetch to get token
                         ]
                     ) {
-                        sh 'vault token lookup > token_debug.txt || echo "Token lookup failed"'
-                        sh 'cat token_debug.txt'
+                        sh '''
+                            echo "VAULT_TOKEN=$VAULT_TOKEN" > token_debug.txt
+                            vault token lookup >> token_debug.txt 2>&1 || echo "Token lookup failed" >> token_debug.txt
+                            cat token_debug.txt
+                        '''
                     }
                 }
             }
