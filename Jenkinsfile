@@ -57,24 +57,9 @@ pipeline {
             }
         }
 
-stage('Fetch AWS STS Credentials') {
+        stage('Fetch AWS STS Credentials') {
             steps {
                 script {
-                    withVault(
-                        configuration: [
-                            vaultUrl: "${VAULT_ADDR}",
-                            vaultCredentialId: 'vault-approle'
-                        ],
-                        vaultSecrets: [
-                            [path: 'aws/creds/jenkins-role', secretValues: []]  // Dummy fetch to set token
-                        ]
-                    ) {
-                        sh '''
-                            echo "VAULT_TOKEN=$VAULT_TOKEN" > sts_token_debug.txt
-                            vault token lookup >> sts_token_debug.txt 2>&1 || echo "Token lookup failed" >> sts_token_debug.txt
-                            cat sts_token_debug.txt
-                        '''
-                    }
                     withVault(
                         configuration: [
                             vaultUrl: "${VAULT_ADDR}",
