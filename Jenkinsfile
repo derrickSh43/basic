@@ -15,27 +15,7 @@ pipeline {
     }
 
     stages {
-stage('Debug Vault Token') {
-            steps {
-                script {
-                    withVault(
-                        configuration: [
-                            vaultUrl: "${VAULT_ADDR}",
-                            vaultCredentialId: 'vault-approle'
-                        ],
-                        vaultSecrets: [
-                            [path: 'secret/data/aws-creds', secretValues: []]  // Dummy fetch to get token
-                        ]
-                    ) {
-                        sh '''
-                            echo "VAULT_TOKEN=$VAULT_TOKEN" > token_debug.txt
-                            vault token lookup >> token_debug.txt 2>&1 || echo "Token lookup failed" >> token_debug.txt
-                            cat token_debug.txt
-                        '''
-                    }
-                }
-            }
-        }
+
 
         stage('Fetch Vault Credentials') {
             steps {
