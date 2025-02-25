@@ -16,51 +16,62 @@ pipeline {
 
 
     stages {
-        stage('Fetch Vault Credentials') {
+stage('Fetch Vault Credentials') {
             steps {
                 script {
                     echo "Fetching static secrets from Vault at ${VAULT_ADDR}"
-                    try {
-                        withVault(
-                            configuration: [
-                                vaultUrl: "${VAULT_ADDR}",
-                                vaultCredentialId: 'AppRole'
-                            ],
-                            vaultSecrets: [
-                                [path: 'secret/data/aws-creds', secretValues: [
-                                    [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
-                                    [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key']
-                                ]],
-                                [path: 'secret/data/sonarqube', secretValues: [
-                                    [envVar: 'SONAR_TOKEN', vaultKey: 'token']
-                                ]],
-                                [path: 'secret/data/snyk', secretValues: [
-                                    [envVar: 'SNYK_TOKEN', vaultKey: 'token']
-                                ]],
-                                [path: 'secret/data/jfrog', secretValues: [
-                                    [envVar: 'ARTIFACTORY_USER', vaultKey: 'username'],
-                                    [envVar: 'ARTIFACTORY_API_KEY', vaultKey: 'api_key']
-                                ]],
-                                [path: 'secret/data/jira', secretValues: [
-                                    [envVar: 'JIRA_USER', vaultKey: 'email'],
-                                    [envVar: 'JIRA_TOKEN', vaultKey: 'token']
-                                ]]
-                            ]
-                        ) {
-                            echo "Static secrets fetched successfully"
-                            echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
-                            sh 'aws sts get-caller-identity || echo "STS failed, likely needs session_token"'
+                    withCredentials([
+                        string(credentialsId: 'vault-role-id', variable: 'ROLE_ID'),
+                        string(credentialsId: 'vault-secret-id', variable: 'SECRET_ID')
+                    ]) {
+                        try {
+                            withVault(
+                                configuration: [
+                                    vaultUrl: "${VAULT_ADDR}",
+                                    vaultCredentialId: 'vault-approle'
+                                ],
+                                vaultSecrets: [
+                                    [path: 'secret/data/aws-creds', secretValues: [
+                                        [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
+                                        [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key']
+                                    ]],
+                                    [path: 'secret/data/sonarqube', secretValues: [
+                                        [envVar: 'SONAR_TOKEN', vaultKey: 'token']
+                                    ]],
+                                    [path: 'secret/data/snyk', secretValues: [
+                                        [envVar: 'SNYK_TOKEN', vaultKey: 'token']
+                                    ]],
+                                    [path: 'secret/data/jfrog', secretValues: [
+                                        [envVar: 'ARTIFACTORY_USER', vaultKey: 'username'],
+                                        [envVar: 'ARTIFACTORY_API_KEY', vaultKey: 'api_key']
+                                    ]],
+                                    [path: 'secret/data/jira', secretValues: [
+                                        [envVar: 'JIRA_USER', vaultKey: 'email'],
+                                        [envVar: 'JIRA_TOKEN', vaultKey: 'token']
+                                    ]]
+                                ]
+                            ) {
+                                echo "Static secrets fetched successfully"
+                                echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+                            }
+                        } catch (Exception e) {
+                            echo "Failed to fetch static secrets: ${e.message}"
+                            // Fetch token manually and test
+                            def tokenResponse = sh(script: """
+                                curl -s --request POST \
+                                --data '{"role_id":"${ROLE_ID}","secret_id":"${SECRET_ID}"}' \
+                                ${VAULT_ADDR}/v1/auth/approle/login
+                            """, returnStdout: true).trim()
+                            echo "AppRole login response: ${tokenResponse}"
+                            def tokenJson = readJSON(text: tokenResponse)
+                            def appRoleToken = tokenJson.auth?.client_token ?: "no-token"
+                            def vaultResponse = sh(script: """
+                                curl -s -H "X-Vault-Token: ${appRoleToken}" \
+                                ${VAULT_ADDR}/v1/secret/data/aws-creds
+                            """, returnStdout: true).trim()
+                            echo "Manual Vault response with AppRole token: ${vaultResponse}"
+                            error("Static secrets fetch failed: ${e.toString()}")
                         }
-                    } catch (Exception e) {
-                        echo "Failed to fetch static secrets: ${e.message}"
-                        // Move default value logic into shell script
-                        def vaultResponse = sh(script: """
-                            VAULT_TOKEN=\${VAULT_TOKEN:-"manual-test"}
-                            curl -s -H "X-Vault-Token: \$VAULT_TOKEN" \
-                            ${VAULT_ADDR}/v1/secret/data/aws-creds
-                        """, returnStdout: true).trim()
-                        echo "Manual Vault response: ${vaultResponse}"
-                        error("Static secrets fetch failed: ${e.toString()}")
                     }
                 }
             }
@@ -73,7 +84,7 @@ pipeline {
                         withVault(
                             configuration: [
                                 vaultUrl: "${VAULT_ADDR}",
-                                vaultCredentialId: 'AppRole'
+                                vaultCredentialId: 'vault-approle'
                             ],
                             vaultSecrets: [
                                 [path: 'aws/creds/jenkins-role', secretValues: [
