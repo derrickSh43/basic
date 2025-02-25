@@ -15,26 +15,24 @@ pipeline {
     }
 
     stages {
-        stage('Fetch Vault Token') {
+stage('Fetch Vault Token') {
             steps {
                 script {
                     withCredentials([
                         string(credentialsId: 'ROLE_ID', variable: 'ROLE_ID'),
                         string(credentialsId: 'SECRET_ID', variable: 'SECRET_ID')
                     ]) {
-                        def tokenResponse = sh(script: """
+                        // Use env vars to avoid interpolation
+                        def tokenResponse = sh(script: '''
                             curl -s --request POST \
-                            --data '{\"role_id\":\"${ROLE_ID}\",\"secret_id\":\"${SECRET_ID}\"}' \
-                            ${VAULT_ADDR}/v1/auth/approle/login
-                            # Uncomment and update the path below for production with a CA certificate
-                            # --cacert /path/to/ca.pem
-                        """, returnStdout: true).trim()
+                            --data "{\"role_id\":\"$ROLE_ID\",\"secret_id\":\"$SECRET_ID\"}" \
+                            "$VAULT_ADDR/v1/auth/approle/login"
+                        ''', returnStdout: true).trim()
 
                         def tokenJson = readJSON(text: tokenResponse)
                         if (!tokenJson.auth?.client_token) {
                             error("Failed to obtain Vault token: Authentication error")
                         }
-                        // Avoid env if possible, or mask it
                         wrap([$class: 'MaskPasswordsBuildWrapper']) {
                             env.VAULT_TOKEN = tokenJson.auth.client_token
                         }
