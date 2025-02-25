@@ -25,17 +25,17 @@ stage('Fetch Vault Credentials') {
                             vaultCredentialId: 'vault-approle'
                         ],
                         vaultSecrets: [
-                            [path: 'secret/data/aws-creds', secretValues: [
+                            [path: 'secret/aws-creds', secretValues: [
                                 [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
                                 [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key']
                             ]],
-                            [path: 'secret/data/sonarqube', secretValues: [
+                            [path: 'secret/sonarqube', secretValues: [
                                 [envVar: 'SONAR_TOKEN_TEMP', vaultKey: 'token']
                             ]],
-                            [path: 'secret/data/snyk', secretValues: [
+                            [path: 'secret/snyk', secretValues: [
                                 [envVar: 'SNYK_TOKEN_TEMP', vaultKey: 'token']
                             ]],
-                            [path: 'secret/data/jfrog', secretValues: [
+                            [path: 'secret/jfrog', secretValues: [
                                 [envVar: 'ARTIFACTORY_USER_TEMP', vaultKey: 'username'],
                                 [envVar: 'ARTIFACTORY_API_KEY_TEMP', vaultKey: 'api_key']
                             ]]
