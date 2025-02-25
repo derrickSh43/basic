@@ -11,7 +11,7 @@ pipeline {
         NAMESPACE = "derrickweil"
         MODULE_NAME = "your-module-name"
         VERSION = "1.1"
-        VAULT_ADDR = "http://3.91.233.45:8200"
+        VAULT_ADDR = "http://18.209.67.85:8200"
     }
 
 
