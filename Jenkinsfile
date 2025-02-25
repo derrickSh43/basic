@@ -24,7 +24,7 @@ stage('Fetch Vault Credentials') {
                 withVault(
                     configuration: [
                         vaultUrl: "${VAULT_ADDR}",
-                        vaultCredentialId: 'vault-approle'
+                        vaultCredentialId: 'AppRole'
                     ],
                     vaultSecrets: [
                         [path: 'secret/data/aws-creds', secretValues: [
