@@ -15,7 +15,7 @@ pipeline {
     }
 
     stages {
-stage('Fetch Vault Token') {
+        stage('Fetch Vault Token') {
             steps {
                 script {
                     withCredentials([
@@ -54,7 +54,7 @@ stage('Fetch Vault Token') {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/derrickSh43/basic.git'
+                git branch: 'main', url: 'https://github.com/derrickSh43/basic'
             }
         }
 
