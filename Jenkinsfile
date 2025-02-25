@@ -13,10 +13,27 @@ pipeline {
         VERSION = "1.1"
         VAULT_ADDR = "http://18.209.67.85:8200"
     }
-
+stage('Debug Vault Token') {
+            steps {
+                script {
+                    withVault(
+                        configuration: [
+                            vaultUrl: "${VAULT_ADDR}",
+                            vaultCredentialId: 'vault-approle'
+                        ],
+                        vaultSecrets: [
+                            [path: 'aws/creds/jenkins-role', secretValues: []]  // Trigger token fetch
+                        ]
+                    ) {
+                        sh 'vault token lookup > token_debug.txt || echo "Token lookup failed"'
+                        sh 'cat token_debug.txt'
+                    }
+                }
+            }
+        }
 
     stages {
-stage('Fetch Vault Credentials') {
+        stage('Fetch Vault Credentials') {
             steps {
                 script {
                     echo "Fetching static secrets from Vault at ${VAULT_ADDR}"
@@ -57,23 +74,7 @@ stage('Fetch Vault Credentials') {
                 }
             }
         }
-        stage('Debug Vault Token') {
-    steps {
-        script {
-            withVault(
-                configuration: [
-                    vaultUrl: "${VAULT_ADDR}",
-                    vaultCredentialId: 'vault-approle'
-                ],
-                vaultSecrets: [
-                    [path: 'aws/creds/jenkins-role', secretValues: []]  // Dummy fetch to force token generation
-                ]
-            ) {
-                sh 'vault token lookup'  // Runs in Jenkins agent with Vault token
-            }
-        }
-    }
-}
+
         stage('Fetch AWS STS Credentials') {
             steps {
                 script {
