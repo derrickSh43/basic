@@ -82,6 +82,7 @@ stage('Fetch AWS STS Credentials') {
                     }
                 }
             }
+        }
         
         stage('Checkout Code') {
             steps {
