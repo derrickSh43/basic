@@ -16,28 +16,20 @@ pipeline {
 
     stages {
 
-        stage('Debug Plugin Token') {
-    steps {
-        script {
-            withVault(
-                configuration: [
-                    vaultUrl: "${VAULT_ADDR}",
-                    vaultCredentialId: 'vault-approle'
-                ],
-                vaultSecrets: [
-                    [path: 'secret/data/aws-creds', secretValues: []]  // Force token fetch
-                ]
-            ) {
-                sh '''
-                    echo "Plugin VAULT_TOKEN=$VAULT_TOKEN" > plugin_token.txt
-                    curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/auth/token/lookup-self" | jq . >> plugin_token.txt
-                    curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/aws/creds/jenkins-role" >> plugin_token.txt 2>&1
-                    cat plugin_token.txt
-                '''
+stage('Debug Vault Token') {
+            steps {
+                script {
+                    sh '''
+                        export VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="5f2c491a-9739-95ad-19bc-71fc8a428f35" secret_id="f3026405-d744-c084-67d3-620e0412241e")
+                        echo "Manual VAULT_TOKEN=$VAULT_TOKEN" > token_debug.txt
+                        vault token lookup >> token_debug.txt 2>&1
+                        vault kv get secret/aws-creds >> token_debug.txt 2>&1
+                        vault read aws/creds/jenkins-role >> token_debug.txt 2>&1
+                        cat token_debug.txt
+                    '''
+                }
             }
         }
-    }
-}
         stage('Fetch Vault Credentials') {
             steps {
                 script {
