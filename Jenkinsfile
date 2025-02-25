@@ -61,12 +61,10 @@ pipeline {
 stage('Fetch AWS STS Credentials') {
             steps {
                 script {
-                    withCredentials([[
-                        $class: 'VaultAppRoleCredentialBinding',
-                        credentialsId: 'vault-approle',
-                        variableRoleId: 'VAULT_ROLE_ID',
-                        variableSecretId: 'VAULT_SECRET_ID'
-                    ]]) {
+                    withCredentials([
+                        string(credentialsId: 'vault-role-id', variable: 'VAULT_ROLE_ID'),
+                        string(credentialsId: 'vault-secret-id', variable: 'VAULT_SECRET_ID')
+                    ]) {
                         sh '''
                             export VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET_ID")
                             vault read -format=json aws/creds/jenkins-role > sts_creds.json
@@ -74,7 +72,6 @@ stage('Fetch AWS STS Credentials') {
                             export AWS_SECRET_ACCESS_KEY=$(jq -r '.data.secret_key' sts_creds.json)
                             export AWS_SESSION_TOKEN=$(jq -r '.data.security_token' sts_creds.json)
                             echo "STS credentials fetched successfully"
-                            # Avoid logging sensitive data
                             echo "AWS_ACCESS_KEY_ID is set"
                             echo "AWS_SECRET_ACCESS_KEY is set"
                             echo "AWS_SESSION_TOKEN is set"
@@ -82,7 +79,7 @@ stage('Fetch AWS STS Credentials') {
                     }
                 }
             }
-        }
+        }    
         
         stage('Checkout Code') {
             steps {
