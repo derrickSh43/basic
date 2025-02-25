@@ -85,34 +85,43 @@ pipeline {
             }
         }
 
-        stage('Static Code Analysis (SonarQube)') {
-            steps {
-                script {
-                    def scanStatus = sh(script: """
-                        ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=derrickSh43_basic \
-                        -Dsonar.organization=derricksh43 \
-                        -Dsonar.host.url=${SONARQUBE_URL} \
-                        -Dsonar.login=${SONAR_TOKEN}
-                    """, returnStatus: true)
+                stage('Static Code Analysis (SonarQube)') {
+                    steps {
+                        script {
+                            def scanStatus = sh(script: """
+                                set +x
+                                ${SONAR_SCANNER_HOME}/bin/sonar-scanner \\
+                                -Dsonar.projectKey=derrickSh43_basic \\
+                                -Dsonar.organization=derricksh43 \\
+                                -Dsonar.host.url=${SONARQUBE_URL} \\
+                                -Dsonar.login=${SONAR_TOKEN}
+                            """, returnStatus: true)
 
-                    if (scanStatus != 0) {
-                        def sonarIssuesRaw = sh(script: """
-                            curl -s -u ${SONAR_TOKEN}: \
-                            "${SONARQUBE_URL}/api/issues/search?componentKeys=derrickSh43_basic&severities=BLOCKER,CRITICAL&statuses=OPEN" | jq -r '.issues[]'
-                        """, returnStdout: true).trim()
+                            if (scanStatus != 0) {
+                                def sonarIssuesRaw = sh(script: """
+                                    set +x
+                                    curl -s -u ${SONAR_TOKEN}: \\
+                                    "${SONARQUBE_URL}/api/issues/search?componentKeys=derrickSh43_basic&severities=BLOCKER,CRITICAL&statuses=OPEN" | jq -r '.issues[]'
+                                """, returnStdout: true).trim()
 
-                        if (sonarIssuesRaw) {
-                            def sonarIssues = readJSON(text: "[${sonarIssuesRaw.split('\n').join(',')}]")
-                            if (sonarIssues.size() > 0) {
-                                def issueDetails = sonarIssues.collect { issue ->
-                                    def filePath = issue.component.split(':').last()
-                                    def line = issue.line ?: 'N/A'
-                                    def snippet = getCodeSnippet(filePath, line)
-                                    "Issue: ${issue.message}\nFile: ${filePath}\nLine: ${line}\nSnippet:\n${snippet ?: 'Not available'}"
-                                }.join('\n\n')
-                                createJiraTicket("SonarQube Security Vulnerabilities Detected", issueDetails)
-                                env.SCAN_FAILED = "true"
+                                if (sonarIssuesRaw) {
+                                    def sonarIssues = readJSON(text: "[${sonarIssuesRaw.split('\n').join(',')}]")
+                                    if (sonarIssues.size() > 0) {
+                                        def issueDetails = sonarIssues.collect { issue ->
+                                            def filePath = issue.component.split(':').last()
+                                            def line = issue.line ?: 'N/A'
+                                            // Placeholder for getCodeSnippet - implement or mock as needed
+                                            def snippet = "Code snippet not implemented"
+                                            "Issue: ${issue.message}\\nFile: ${filePath}\\nLine: ${line}\\nSnippet:\\n${snippet}"
+                                        }.join('\\n\\n')
+                                        echo "SonarQube issues found - creating JIRA ticket"
+                                        // Placeholder for createJiraTicket - implement or mock
+                                        sh "echo 'Would create JIRA ticket with: ${issueDetails}'"
+                                        env.SCAN_FAILED = "true"
+                                    }
+                                }
+                            } else {
+                                echo "SonarQube scan completed successfully"
                             }
                         }
                     }
