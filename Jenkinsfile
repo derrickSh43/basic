@@ -16,25 +16,6 @@ pipeline {
 
 
     stages {
-        stage('Fetch AWS STS Credentials') {
-            steps {
-                withVault(
-                    configuration: [
-                        vaultUrl: "${VAULT_ADDR}",
-                        vaultCredentialId: 'AppRole'
-                    ],
-                    vaultSecrets: [
-                        [path: 'aws/creds/jenkins-role', secretValues: [
-                            [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
-                            [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key'],
-                            [envVar: 'AWS_SESSION_TOKEN', vaultKey: 'security_token']
-                        ]]
-                    ]
-                ) {
-                    sh 'aws sts get-caller-identity'
-                }
-            }
-        }
         stage('Fetch Vault Credentials') {
             steps {
                 withVault(
@@ -70,6 +51,36 @@ pipeline {
                 }
             }
         }
+
+        stage('Fetch AWS STS Credentials') {
+            steps {
+                script {
+                    echo "Fetching STS credentials from Vault at ${VAULT_ADDR}/aws/creds/jenkins-role"
+                    try {
+                        withVault(
+                            configuration: [
+                                vaultUrl: "${VAULT_ADDR}",
+                                vaultCredentialId: 'AppRole'
+                            ],
+                            vaultSecrets: [
+                                [path: 'aws/creds/jenkins-role', secretValues: [
+                                    [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
+                                    [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key'],
+                                    [envVar: 'AWS_SESSION_TOKEN', vaultKey: 'security_token']
+                                ]]
+                            ]
+                        ) {
+                            echo "STS credentials fetched successfully"
+                            sh 'aws sts get-caller-identity'
+                        }
+                    } catch (Exception e) {
+                        echo "Failed to fetch STS credentials: ${e.message}"
+                        error("STS credentials fetch failed: ${e.toString()}")
+                    }
+                }
+            }
+        }
+    }
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/derrickSh43/basic.git'
