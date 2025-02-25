@@ -19,8 +19,8 @@ pipeline {
             steps {
                 script {
                     withCredentials([
-                        string(credentialsId: 'vault-role-id', variable: 'ROLE_ID'),
-                        string(credentialsId: 'vault-secret-id', variable: 'SECRET_ID')
+                        string(credentialsId: 'ROLE_ID', variable: 'ROLE_ID'),
+                        string(credentialsId: '	SECRET_ID', variable: 'SECRET_ID')
                     ]) {
                         echo "Attempting to fetch Vault token from ${VAULT_ADDR}/v1/auth/approle/login"
                         // Capture both stdout and stderr, log the attempt
