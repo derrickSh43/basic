@@ -15,46 +15,44 @@ pipeline {
     }
 
     stages {
-        stage('Fetch Vault Token') {
+        stage('Fetch Vault Credentials') {
             steps {
-                script {
-                    withCredentials([
-                        string(credentialsId: 'vault-role-id', variable: 'ROLE_ID'),
-                        string(credentialsId: 'vault-secret-id', variable: 'SECRET_ID')
-                    ]) {
-                        echo "Attempting to fetch Vault token from ${VAULT_ADDR}/v1/auth/approle/login"
-                        // Define the curl command with proper JSON syntax
-                        def curlCommand = 'curl -s --request POST --data \'{"role_id":"\'"$ROLE_ID"\'","secret_id":"\'"$SECRET_ID"\'"}\' "$VAULT_ADDR/v1/auth/approle/login" 2>&1'
-                        // Log the masked command
-                        echo "Executing command: ${curlCommand.replace(ROLE_ID, '****').replace(SECRET_ID, '****')}"
-                        def tokenResponse = sh(script: curlCommand, returnStdout: true).trim()
-
-                        echo "Raw Vault response: ${tokenResponse}"
-                        try {
-                            def tokenJson = readJSON(text: tokenResponse)
-                            echo "Parsed JSON: ${tokenJson.toString()}"
-                            if (!tokenJson.auth?.client_token) {
-                                echo "No client_token found in response"
-                                error("Failed to obtain Vault token: Authentication error - response: ${tokenResponse}")
-                            } else {
-                                echo "Vault token obtained successfully"
-                                wrap([$class: 'MaskPasswordsBuildWrapper']) {
-                                    env.VAULT_TOKEN = tokenJson.auth.client_token
-                                }
-                            }
-                        } catch (Exception e) {
-                            echo "Error parsing Vault response: ${e.message}"
-                            error("Failed to obtain Vault token: Parsing error - response: ${tokenResponse}")
-                        }
-                    }
+                withVault(
+                    configuration: [
+                        vaultUrl: "${VAULT_ADDR}",
+                        vaultCredentialId: 'vault-approle'
+                    ],
+                    vaultSecrets: [
+                        [path: 'secret/data/aws-creds', secretValues: [
+                            [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
+                            [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key'],
+                            [envVar: 'AWS_SESSION_TOKEN', vaultKey: 'session_token']
+                        ]],
+                        [path: 'secret/data/sonarqube', secretValues: [
+                            [envVar: 'SONAR_TOKEN', vaultKey: 'token']
+                        ]],
+                        [path: 'secret/data/snyk', secretValues: [
+                            [envVar: 'SNYK_TOKEN', vaultKey: 'token']
+                        ]],
+                        [path: 'secret/data/jfrog', secretValues: [
+                            [envVar: 'ARTIFACTORY_USER', vaultKey: 'username'],
+                            [envVar: 'ARTIFACTORY_API_KEY', vaultKey: 'api_key']
+                        ]],
+                        [path: 'secret/data/jira', secretValues: [
+                            [envVar: 'JIRA_USER', vaultKey: 'email'],
+                            [envVar: 'JIRA_TOKEN', vaultKey: 'token']
+                        ]]
+                    ]
+                ) {
+                    sh 'aws sts get-caller-identity'
+                    // Debugging (remove later)
+                    echo "Fetched credentials: AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}, SONAR_TOKEN=${SONAR_TOKEN}, SNYK_TOKEN=${SNYK_TOKEN}, ARTIFACTORY_USER=${ARTIFACTORY_USER}, JIRA_USER=${JIRA_USER}"
                 }
             }
         }
-
-
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/derrickSh43/basic'
+                git branch: 'main', url: 'https://github.com/derrickSh43/basic.git'
             }
         }
 
