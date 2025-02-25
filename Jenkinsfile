@@ -19,22 +19,34 @@ pipeline {
             steps {
                 script {
                     withCredentials([
-                        string(credentialsId: 'ROLE_ID', variable: 'ROLE_ID'),
-                        string(credentialsId: 'SECRET_ID', variable: 'SECRET_ID')
+                        string(credentialsId: 'vault-role-id', variable: 'ROLE_ID'),
+                        string(credentialsId: 'vault-secret-id', variable: 'SECRET_ID')
                     ]) {
-                        // Fixed JSON syntax with proper quoting
+                        echo "Attempting to fetch Vault token from ${VAULT_ADDR}/v1/auth/approle/login"
+                        // Capture both stdout and stderr, log the attempt
                         def tokenResponse = sh(script: '''
+                            set -x  # Enable shell debugging
                             curl -s --request POST \
                             --data "{\"role_id\":\"$ROLE_ID\",\"secret_id\":\"$SECRET_ID\"}" \
-                            "$VAULT_ADDR/v1/auth/approle/login"
+                            "$VAULT_ADDR/v1/auth/approle/login" 2>&1
                         ''', returnStdout: true).trim()
 
-                        def tokenJson = readJSON(text: tokenResponse)
-                        if (!tokenJson.auth?.client_token) {
-                            error("Failed to obtain Vault token: Authentication error - response: ${tokenResponse}")
-                        }
-                        wrap([$class: 'MaskPasswordsBuildWrapper']) {
-                            env.VAULT_TOKEN = tokenJson.auth.client_token
+                        echo "Raw Vault response: ${tokenResponse}"
+                        try {
+                            def tokenJson = readJSON(text: tokenResponse)
+                            echo "Parsed JSON: ${tokenJson.toString()}"
+                            if (!tokenJson.auth?.client_token) {
+                                echo "No client_token found in response"
+                                error("Failed to obtain Vault token: Authentication error - response: ${tokenResponse}")
+                            } else {
+                                echo "Vault token obtained successfully"
+                                wrap([$class: 'MaskPasswordsBuildWrapper']) {
+                                    env.VAULT_TOKEN = tokenJson.auth.client_token
+                                }
+                            }
+                        } catch (Exception e) {
+                            echo "Error parsing Vault response: ${e.message}"
+                            error("Failed to obtain Vault token: Parsing error - response: ${tokenResponse}")
                         }
                     }
                 }
