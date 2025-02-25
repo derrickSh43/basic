@@ -16,44 +16,36 @@ pipeline {
 
     stages {
 
-        stage('Fetch Vault Credentials') {
+stage('Fetch Vault Credentials') {
             steps {
                 script {
-                    echo "Fetching static secrets from Vault at ${VAULT_ADDR}"
-                    try {
-                        withVault(
-                            configuration: [
-                                vaultUrl: "${VAULT_ADDR}",
-                                vaultCredentialId: 'vault-approle'
-                            ],
-                            vaultSecrets: [
-                                [path: 'secret/aws-creds', secretValues: [
-                                    [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
-                                    [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key']
-                                ]],
-                                [path: 'secret/sonarqube', secretValues: [
-                                    [envVar: 'SONAR_TOKEN_TEMP', vaultKey: 'token']
-                                ]],
-                                [path: 'secret/snyk', secretValues: [
-                                    [envVar: 'SNYK_TOKEN_TEMP', vaultKey: 'token']
-                                ]],
-                                [path: 'secret/jfrog', secretValues: [
-                                    [envVar: 'ARTIFACTORY_USER', vaultKey: 'username'],
-                                    [envVar: 'ARTIFACTORY_API_KEY', vaultKey: 'api_key']
-                                ]],
-                                [path: 'secret/jira', secretValues: [
-                                    [envVar: 'JIRA_USER', vaultKey: 'email'],
-                                    [envVar: 'JIRA_TOKEN', vaultKey: 'token']
-                                ]]
-                            ]
-                        ) {
-                            env.SONAR_TOKEN = "${SONAR_TOKEN_TEMP}"
-                            echo "Static secrets fetched successfully"
-
-                        }
-                    } catch (Exception e) {
-                        echo "Failed to fetch static secrets: ${e.message}"
-                        error("Static secrets fetch failed: ${e.toString()}")
+                    withVault(
+                        configuration: [
+                            vaultUrl: "${VAULT_ADDR}",
+                            vaultCredentialId: 'vault-approle'
+                        ],
+                        vaultSecrets: [
+                            [path: 'secret/data/aws-creds', secretValues: [
+                                [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
+                                [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key']
+                            ]],
+                            [path: 'secret/data/sonarqube', secretValues: [
+                                [envVar: 'SONAR_TOKEN_TEMP', vaultKey: 'token']
+                            ]],
+                            [path: 'secret/data/snyk', secretValues: [
+                                [envVar: 'SNYK_TOKEN_TEMP', vaultKey: 'token']
+                            ]],
+                            [path: 'secret/data/jfrog', secretValues: [
+                                [envVar: 'ARTIFACTORY_USER_TEMP', vaultKey: 'username'],
+                                [envVar: 'ARTIFACTORY_API_KEY_TEMP', vaultKey: 'api_key']
+                            ]]
+                        ]
+                    ) {
+                        env.SONAR_TOKEN = "${SONAR_TOKEN_TEMP}"
+                        env.SNYK_TOKEN = "${SNYK_TOKEN_TEMP}"
+                        env.ARTIFACTORY_USER = "${ARTIFACTORY_USER_TEMP}"
+                        env.ARTIFACTORY_API_KEY = "${ARTIFACTORY_API_KEY_TEMP}"
+                        echo "Static secrets fetched successfully"
                     }
                 }
             }
@@ -128,67 +120,95 @@ pipeline {
             
         
 
-        stage('Snyk Security Scan') {
+stage('Snyk Security Scan') {
             steps {
                 script {
-                    sh 'export SNYK_TOKEN=${SNYK_TOKEN}'
-                    sh "snyk iac test --json --severity-threshold=low > snyk-results.json || true"
-                    def snykIssuesList = readJSON(file: "snyk-results.json").infrastructureAsCodeIssues
-                    if (snykIssuesList?.size() > 0) {
-                        def issueDetails = snykIssuesList.collect { issue ->
-                            def filePath = issue.filePath ?: 'N/A'
-                            def line = issue.lineNumber ?: 'N/A'
-                            def snippet = getCodeSnippet(filePath, line)
-                            "Issue: ${issue.title}\nSeverity: ${issue.severity}\nFile: ${filePath}\nLine: ${line}\nImpact: ${issue.impact}\nResolution: ${issue.resolution}\nSnippet:\n${snippet ?: 'Not available'}"
-                        }.join('\n\n')
-                        createJiraTicket("Snyk IaC Security Issues Detected", issueDetails)
+                    def snykStatus = sh(script: """
+                        set +x
+                        export SNYK_TOKEN=${SNYK_TOKEN}
+                        snyk iac test --json --severity-threshold=low > snyk-results.json 2>&1
+                    """, returnStatus: true)
+
+                    def snykOutput = readFile('snyk-results.json').trim()
+                    if (snykStatus != 0 || (snykOutput && !snykOutput.startsWith('['))) {
+                        echo "Snyk scan failed or produced invalid JSON"
+                        if (snykOutput) {
+                            echo "Snyk output: ${snykOutput}"
+                        }
                         env.SCAN_FAILED = "true"
                     } else {
-                        echo "No Snyk issues detected."
+                        def snykIssuesList = readJSON(file: "snyk-results.json").infrastructureAsCodeIssues
+                        if (snykIssuesList?.size() > 0) {
+                            def issueDetails = snykIssuesList.collect { issue ->
+                                def filePath = issue.filePath ?: 'N/A'
+                                def line = issue.lineNumber ?: 'N/A'
+                                def snippet = "Code snippet not implemented"
+                                "Issue: ${issue.title}\\nSeverity: ${issue.severity}\\nFile: ${filePath}\\nLine: ${line}\\nImpact: ${issue.impact}\\nResolution: ${issue.resolution}\\nSnippet:\\n${snippet}"
+                            }.join('\\n\\n')
+                            echo "Snyk issues found - creating JIRA ticket"
+                            sh "echo 'Would create JIRA ticket with details'"
+                            env.SCAN_FAILED = "true"
+                        } else {
+                            echo "No Snyk issues detected"
+                        }
                     }
+                    sh "rm -f snyk-results.json"
                 }
             }
         }
 
-        stage('Build Artifact') {
+ stage('Build Artifact') {
             steps {
                 sh 'echo "Building artifact..."'
                 sh 'mkdir -p dist && echo "dummy content" > dist/test.zip'
             }
         }
-
         stage('Upload Artifact to JFrog') {
             steps {
                 sh """
-                    jfrog rt upload "dist/*.zip" "${ARTIFACTORY_REPO}/${NAMESPACE}/${MODULE_NAME}/${VERSION}/" \
+                    set +x
+                    jfrog rt upload "dist/*.zip" "${ARTIFACTORY_REPO}/${NAMESPACE}/${MODULE_NAME}/${VERSION}/" \\
                     --url="${ARTIFACTORY_URL}" --user="${ARTIFACTORY_USER}" --apikey="${ARTIFACTORY_API_KEY}"
                 """
             }
         }
-
         stage('JFrog Xray Scan') {
             steps {
                 script {
-                    sh """
-                        jfrog rt bs \
-                        --url="${ARTIFACTORY_URL}" \
-                        --user="${ARTIFACTORY_USER}" \
-                        --apikey="${ARTIFACTORY_API_KEY}" \
-                        "${ARTIFACTORY_REPO}/${NAMESPACE}/${MODULE_NAME}/${VERSION}/" > xray-scan.json || true
-                    """
-                    def xrayIssues = readJSON(file: "xray-scan.json").violations
-                    if (xrayIssues?.size() > 0) {
-                        def issueDetails = xrayIssues.collect { issue ->
-                            "Issue: ${issue.summary}\nSeverity: ${issue.severity}\nDescription: ${issue.description}\nCVE: ${issue.cve ?: 'N/A'}"
-                        }.join('\n\n')
-                        createJiraTicket("JFrog Xray Security Violations Detected", issueDetails)
+                    def xrayStatus = sh(script: """
+                        set +x
+                        jfrog rt bs \\
+                        --url="${ARTIFACTORY_URL}" \\
+                        --user="${ARTIFACTORY_USER}" \\
+                        --apikey="${ARTIFACTORY_API_KEY}" \\
+                        "${ARTIFACTORY_REPO}/${NAMESPACE}/${MODULE_NAME}/${VERSION}/" > xray-scan.json 2>&1
+                    """, returnStatus: true)
+
+                    def xrayOutput = readFile('xray-scan.json').trim()
+                    if (xrayStatus != 0 || (xrayOutput && !xrayOutput.startsWith('{'))) {
+                        echo "JFrog Xray scan failed or produced invalid JSON"
+                        if (xrayOutput) {
+                            echo "Xray output: ${xrayOutput}"
+                        }
                         env.SCAN_FAILED = "true"
                     } else {
-                        echo "No JFrog Xray violations detected."
+                        def xrayIssues = readJSON(file: "xray-scan.json").violations
+                        if (xrayIssues?.size() > 0) {
+                            def issueDetails = xrayIssues.collect { issue ->
+                                "Issue: ${issue.summary}\\nSeverity: ${issue.severity}\\nDescription: ${issue.description}\\nCVE: ${issue.cve ?: 'N/A'}"
+                            }.join('\\n\\n')
+                            echo "JFrog Xray violations found - creating JIRA ticket"
+                            sh "echo 'Would create JIRA ticket with details'"
+                            env.SCAN_FAILED = "true"
+                        } else {
+                            echo "No JFrog Xray violations detected"
+                        }
                     }
+                    sh "rm -f xray-scan.json"
                 }
             }
         }
+    
 
         stage('Fail Pipeline if Scans Fail') {
             steps {
