@@ -50,10 +50,7 @@ stage('Fetch Vault Credentials') {
                             echo "Static secrets fetched successfully"
                             echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
                         }
-                    } catch (Exception e) {
-                        echo "Failed to fetch static secrets: ${e.message}"
-                        error("Static secrets fetch failed: ${e.toString()}")
-                    }
+                    } 
                 }
             }
         }
