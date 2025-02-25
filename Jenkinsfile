@@ -28,7 +28,7 @@ stage('Fetch Vault Credentials') {
                             withVault(
                                 configuration: [
                                     vaultUrl: "${VAULT_ADDR}",
-                                    vaultCredentialId: 'vault-approle'
+                                    vaultCredentialId: 'AppRole'
                                 ],
                                 vaultSecrets: [
                                     [path: 'secret/data/aws-creds', secretValues: [
@@ -84,7 +84,7 @@ stage('Fetch Vault Credentials') {
                         withVault(
                             configuration: [
                                 vaultUrl: "${VAULT_ADDR}",
-                                vaultCredentialId: 'vault-approle'
+                                vaultCredentialId: 'AppRole'
                             ],
                             vaultSecrets: [
                                 [path: 'aws/creds/jenkins-role', secretValues: [
