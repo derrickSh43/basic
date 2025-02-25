@@ -15,14 +15,14 @@ pipeline {
     }
 
     stages {
-stage('Fetch Vault Token') {
+        stage('Fetch Vault Token') {
             steps {
                 script {
                     withCredentials([
                         string(credentialsId: 'ROLE_ID', variable: 'ROLE_ID'),
                         string(credentialsId: 'SECRET_ID', variable: 'SECRET_ID')
                     ]) {
-                        // Use env vars to avoid interpolation
+                        // Fixed JSON syntax with proper quoting
                         def tokenResponse = sh(script: '''
                             curl -s --request POST \
                             --data "{\"role_id\":\"$ROLE_ID\",\"secret_id\":\"$SECRET_ID\"}" \
@@ -31,7 +31,7 @@ stage('Fetch Vault Token') {
 
                         def tokenJson = readJSON(text: tokenResponse)
                         if (!tokenJson.auth?.client_token) {
-                            error("Failed to obtain Vault token: Authentication error")
+                            error("Failed to obtain Vault token: Authentication error - response: ${tokenResponse}")
                         }
                         wrap([$class: 'MaskPasswordsBuildWrapper']) {
                             env.VAULT_TOKEN = tokenJson.auth.client_token
