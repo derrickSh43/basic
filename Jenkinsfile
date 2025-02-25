@@ -13,7 +13,9 @@ pipeline {
         VERSION = "1.1"
         VAULT_ADDR = "http://18.209.67.85:8200"
     }
-stage('Debug Vault Token') {
+
+    stages {
+        stage('Debug Vault Token') {
             steps {
                 script {
                     withVault(
@@ -32,7 +34,6 @@ stage('Debug Vault Token') {
             }
         }
 
-    stages {
         stage('Fetch Vault Credentials') {
             steps {
                 script {
