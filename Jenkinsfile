@@ -16,18 +16,20 @@ pipeline {
 
 
     stages {
-        stage('Fetch Vault Credentials') {
-            steps {
+stage('Fetch Vault Credentials') {
+    steps {
+        script {
+            echo "Fetching static secrets from Vault at ${VAULT_ADDR}"
+            try {
                 withVault(
                     configuration: [
                         vaultUrl: "${VAULT_ADDR}",
-                        vaultCredentialId: 'AppRole'
+                        vaultCredentialId: 'vault-approle'
                     ],
                     vaultSecrets: [
                         [path: 'secret/data/aws-creds', secretValues: [
                             [envVar: 'AWS_ACCESS_KEY_ID', vaultKey: 'access_key'],
-                            [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key'],
-                            [envVar: 'AWS_SESSION_TOKEN', vaultKey: 'session_token']
+                            [envVar: 'AWS_SECRET_ACCESS_KEY', vaultKey: 'secret_key']
                         ]],
                         [path: 'secret/data/sonarqube', secretValues: [
                             [envVar: 'SONAR_TOKEN', vaultKey: 'token']
@@ -45,12 +47,21 @@ pipeline {
                         ]]
                     ]
                 ) {
-                    sh 'aws sts get-caller-identity'
-                    // Debugging (remove later)
-                    echo "Fetched credentials: AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}, SONAR_TOKEN=${SONAR_TOKEN}, SNYK_TOKEN=${SNYK_TOKEN}, ARTIFACTORY_USER=${ARTIFACTORY_USER}, JIRA_USER=${JIRA_USER}"
+                    echo "Static secrets fetched successfully"
+                    echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"  // Debug
                 }
+            } catch (Exception e) {
+                echo "Failed to fetch static secrets: ${e.message}"
+                def vaultResponse = sh(script: """
+                    curl -s -H "X-Vault-Token: ${VAULT_TOKEN:-'manual-test'}" \
+                    ${VAULT_ADDR}/v1/secret/data/aws-creds
+                """, returnStdout: true).trim()
+                echo "Manual Vault response: ${vaultResponse}"
+                error("Static secrets fetch failed: ${e.toString()}")
             }
         }
+    }
+}
 
         stage('Fetch AWS STS Credentials') {
             steps {
