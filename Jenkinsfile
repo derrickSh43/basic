@@ -11,7 +11,7 @@ pipeline {
         NAMESPACE = "derrickweil"
         MODULE_NAME = "your-module-name"
         VERSION = "1.1"
-        VAULT_ADDR = "http://18.209.67.85:8200"
+        VAULT_ADDR = "http://54.235.6.210:8200"
         JFROG_CLI_BUILD_NAME = "basic-build"  // Build name for JFrog
         JFROG_CLI_BUILD_NUMBER = "${BUILD_NUMBER}"  // Jenkins build number
     }
